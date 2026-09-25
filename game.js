@@ -6,6 +6,7 @@ export const TIMER_OPTIONS = [86400, 172800, 259200, 604800];
 
 function fail(message) { throw new Error(message); }
 function token(bytes = 18) { return randomBytes(bytes).toString('base64url'); }
+export function roomCode() { return String(randomInt(10000)).padStart(4, '0'); }
 function key(x, y) { return `${x},${y}`; }
 function coord(value) {
   if (!Number.isInteger(value) || Math.abs(value) > 100) fail('Invalid board position.');
@@ -42,7 +43,7 @@ export function createGame({ name, email, timerSeconds, now = Date.now() }) {
   // The printed game starts with one face-up card. Give a wild starter one fixed identity.
   if (starter.wild) starter.as = { color: COLORS[randomInt(4)], shape: SHAPES[randomInt(4)], number: randomInt(1, 5) };
   const game = {
-    id: token(9), status: 'waiting', timerSeconds, createdAt: now,
+    id: roomCode(), status: 'waiting', timerSeconds, createdAt: now,
     players: [{ id: token(9), token: token(), name: cleanName(name), email: cleanEmail(email), hand: [], score: 0 }],
     board: { '0,0': starter }, deck, current: 0, deadline: null,
     consecutivePasses: 0, pendingSwap: null, lastMove: null, winner: null

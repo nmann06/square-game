@@ -30,14 +30,18 @@ async function remote(method, query, body) {
   return response.status === 204 ? [] : response.json();
 }
 export const durableStorage = Boolean(url && secret);
+// Returns false if the room id is already taken.
 export async function createRoom(game) {
   if (durableStorage) {
-    await remote('POST', '', { id: game.id, state: game });
-    return;
+    try { await remote('POST', '', { id: game.id, state: game }); }
+    catch (error) { if (/\(409\)/.test(error.message)) return false; throw error; }
+    return true;
   }
   const rooms = await localRead();
+  if (rooms[game.id]) return false;
   rooms[game.id] = { state: game, version: 0 };
   await localWrite(rooms);
+  return true;
 }
 export async function getRoom(id) {
   if (durableStorage) {

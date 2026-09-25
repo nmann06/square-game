@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createGame, joinGame, playerIndex, publicGame, playCards, swapWild,
-  passTurn, advanceExpired
+  passTurn, advanceExpired, roomCode
 } from './game.js';
 import { createRoom, getRoom, updateRoom, durableStorage } from './store.js';
 import { mailReady, notifyNextPlayer } from './mail.js';
@@ -102,7 +102,12 @@ async function handler(req, res) {
       return send(res, 503, { error: 'Day-length games require Supabase storage and Resend email configuration.' });
     }
     const game = createGame({ ...input, timerSeconds: Number(input.timerSeconds) });
-    await createRoom(game);
+    let created = false;
+    for (let attempt = 0; attempt < 20 && !created; attempt++) {
+      if (attempt) game.id = roomCode();
+      created = await createRoom(game);
+    }
+    if (!created) return send(res, 503, { error: 'No room codes available. Please try again.' });
     return send(res, 201, { room: publicGame(game, 0), token: game.players[0].token });
   }
   const match = path.match(/^\/api\/rooms\/([\w-]+)(?:\/(join|action))?$/);
