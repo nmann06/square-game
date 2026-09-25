@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#14271f">
+  <title>Square Game</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a href="/" class="brand"><span class="brand-mark">□</span> Square Game</a>
+      <span class="top-note">A little grid. A lot of possibilities.</span>
+    </header>
+
+    <main>
+      <section id="landing" class="landing">
+        <div class="hero">
+          <p class="eyebrow">ROOM BASED CARD GAME</p>
+          <h1>Make your move.<br><em>Own the square.</em></h1>
+          <p>Build lines of color, shape, and number with a friend. Complete a four-card lot to double your score. Trade a wild card off the board before your turn and make its replacement count.</p>
+          <div class="hero-tiles" aria-hidden="true"><span class="tile red">●<small>3</small></span><span class="tile yellow">◆<small>1</small></span><span class="tile blue">▲<small>4</small></span><span class="tile green">✦<small>2</small></span></div>
+        </div>
+        <div class="setup card-panel">
+          <h2>Create a room</h2>
+          <label>Your name <input id="create-name" maxlength="30" placeholder="Player one" autocomplete="name"></label>
+          <label>Email <input id="create-email" type="email" placeholder="you@example.com" autocomplete="email"><small>Required for day-length games so we can email your turn link.</small></label>
+          <div class="timer-head"><span>Turn timer</span><strong id="minute-label">5 minutes</strong></div>
+          <input id="timer-slider" type="range" min="1" max="10" step="1" value="5" aria-label="Turn timer in minutes">
+          <div class="day-buttons" role="group" aria-label="Day timers"><button data-days="1">1 day</button><button data-days="2">2 days</button><button data-days="3">3 days</button><button data-days="7">7 days</button></div>
+          <p id="timer-help" class="fine">Choose a minute timer, or pick a day for email turns.</p>
+          <button id="create-button" class="primary wide">Create room <span>↗</span></button>
+          <p id="setup-error" class="error" role="alert"></p>
+        </div>
+      </section>
+
+      <section id="room" class="room hidden">
+        <div class="room-header">
+          <div><p class="eyebrow">PRIVATE ROOM <span id="room-code"></span></p><h1 id="room-heading">Waiting for a friend</h1><p id="room-subtitle"></p></div>
+          <div class="room-actions"><button id="copy-link" class="secondary">Copy invite link</button><span id="copy-status" class="fine"></span></div>
+        </div>
+        <div id="join-panel" class="card-panel join-panel hidden">
+          <h2>Join this room</h2>
+          <label>Your name <input id="join-name" maxlength="30" placeholder="Player two" autocomplete="name"></label>
+          <label>Email <input id="join-email" type="email" placeholder="you@example.com" autocomplete="email"><small>Required for day-length games.</small></label>
+          <button id="join-button" class="primary">Join game</button>
+        </div>
+        <div id="waiting-panel" class="card-panel waiting-panel hidden"><div class="pulse"></div><div><h2>Room is ready</h2><p>Share the invite link with your opponent. The game begins when they join.</p></div></div>
+        <div id="game-panel" class="game-panel hidden">
+          <div class="scorebar"><div id="players"></div><div class="turn-box"><span id="turn-label"></span><strong id="countdown"></strong></div></div>
+          <div id="last-move" class="last-move hidden"></div>
+          <div class="play-layout">
+            <div class="board-wrap"><div class="board-head"><span>GAME BOARD</span><span id="deck-count"></span></div><div id="board" class="board" aria-label="Game board"></div></div>
+            <aside class="side-panel">
+              <div class="side-section"><h2>Your hand</h2><p id="hand-help" class="fine">Select a card, then choose an empty square.</p><div id="hand" class="hand"></div></div>
+              <div id="wild-controls" class="side-section hidden"><h3>Wild card identity</h3><div class="wild-fields"><select id="wild-color" aria-label="Wild color"><option value="red">Red</option><option value="blue">Blue</option><option value="green">Green</option><option value="yellow">Yellow</option></select><select id="wild-shape" aria-label="Wild shape"><option value="circle">Circle</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="star">Star</option></select><select id="wild-number" aria-label="Wild number"><option>1</option><option>2</option><option>3</option><option>4</option></select></div></div>
+              <div class="side-section"><h3>Move</h3><p id="move-help" class="fine">Play 1–4 cards in one row or column.</p><div id="staged" class="staged"></div><div class="button-row"><button id="undo-button" class="secondary">Undo</button><button id="play-button" class="primary">Play cards</button></div><button id="pass-button" class="text-button">Pass turn</button><label class="trade-label"><input id="trade-mode" type="checkbox"> Trade selected cards when passing</label><p id="swap-help" class="fine">To pick up a wild: select a regular card in your hand, then click the wild card on the board before placing anything.</p></div>
+              <div class="rules-mini"><h3>Quick rules</h3><p>Each line has 2–4 cards. For color, shape, and number, values must be all the same or all different. Score every line you create or extend. Each completed four-card lot doubles the whole turn.</p><a href="https://www.ultraboardgames.com/iota/game-rules.php" target="_blank" rel="noopener">Read the original rules ↗</a></div>
+            </aside>
+          </div>
+        </div>
+        <p id="room-error" class="error" role="alert"></p>
+      </section>
+    </main>
+    <footer>Square Game · Inspired by Iota · Custom wild exchange scoring</footer>
+  </div>
+</body>
+</html>
