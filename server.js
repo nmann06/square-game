@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createGame, joinGame, playerIndex, publicGame, playCards, swapWild,
-  passTurn, advanceExpired, roomCode
+  passTurn, advanceExpired, roomCode, inviteFriend
 } from './game.js';
 import { createRoom, getRoom, updateRoom, durableStorage } from './store.js';
-import { mailReady, notifyNextPlayer } from './mail.js';
+import { mailReady, notifyNextPlayer, sendInvite, notifyInviteAccepted } from './mail.js';
 
 const port = Number(process.env.PORT || 10000);
 const basePath = '/square-game';
@@ -110,7 +110,7 @@ async function handler(req, res) {
     if (!created) return send(res, 503, { error: 'No room codes available. Please try again.' });
     return send(res, 201, { room: publicGame(game, 0), token: game.players[0].token });
   }
-  const match = path.match(/^\/api\/rooms\/([\w-]+)(?:\/(join|action))?$/);
+  const match = path.match(/^\/api\/rooms\/([\w-]+)(?:\/(join|action|invite))?$/);
   if (!match) return send(res, 404, { error: 'Not found.' });
   const [, id, operation] = match;
   const row = await loadFresh(id);
@@ -120,7 +120,21 @@ async function handler(req, res) {
   if (req.method === 'POST' && operation === 'join') {
     const next = joinGame(game, await body(req));
     if (!(await updateRoom(id, row.version, next))) return send(res, 409, { error: 'Room changed. Please retry.' });
+    if (next.invites?.length) {
+      try { await notifyInviteAccepted(next); }
+      catch (error) { console.error(error); }
+    }
     return send(res, 200, { room: publicGame(next, 1), token: next.players[1].token });
+  }
+  if (req.method === 'POST' && operation === 'invite') {
+    if (!mailReady()) return send(res, 503, { error: 'Email invites are not set up on this server.' });
+    const index = auth(req, game);
+    if (index < 0) return send(res, 401, { error: 'Open your personal game link to send invites.' });
+    const input = await body(req);
+    const next = inviteFriend(game, index, input);
+    if (!(await updateRoom(id, row.version, next))) return send(res, 409, { error: 'Room changed. Please retry.' });
+    await sendInvite(next, next.invites.at(-1).email);
+    return send(res, 200, { room: publicGame(next, index) });
   }
   if (req.method === 'POST' && operation === 'action') {
     const index = auth(req, game);

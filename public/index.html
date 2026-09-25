@@ -55,6 +55,14 @@
           <button id="join-button" class="primary">Join game</button>
         </div>
         <div id="waiting-panel" class="card-panel waiting-panel hidden"><div class="pulse"></div><div><h2>Room is ready</h2><p>Share the invite link with your opponent. The game begins when they join.</p></div></div>
+        <div id="invite-panel" class="card-panel invite-panel hidden">
+          <h2>Invite by email</h2>
+          <label>Friend's email <input id="invite-email" type="email" placeholder="friend@example.com" autocomplete="off"></label>
+          <label id="host-email-field">Your email <input id="host-email" type="email" placeholder="you@example.com" autocomplete="email"><small>We'll email you when they accept.</small></label>
+          <button id="invite-button" class="primary">Send invite</button>
+          <p id="invite-status" class="fine"></p>
+          <p id="invite-error" class="error" role="alert"></p>
+        </div>
         <div id="game-panel" class="game-panel hidden">
           <div class="scorebar"><div id="players"></div><div class="turn-box"><span id="turn-label"></span><strong id="countdown"></strong></div></div>
           <div id="last-move" class="last-move hidden"></div>

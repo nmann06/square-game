@@ -47,6 +47,8 @@ The existing `nathanielmann.ca` homepage remains a Render static site. It hosts 
 
 The host chooses a 1–10 minute timer or a 1, 2, 3, or 7 day timer. Day rooms require persistent storage and email configuration. After a completed move, the next player receives an email with a personal rejoin link. Treat that link as a password: anyone holding it can play as that player. The general invite link has no player token and is safe to share with the intended opponent.
 
+While a room is waiting, the host can email up to three invites from the room page. The invite contains the general room link and code. When anyone joins a room that had an emailed invite, the host gets an email saying the invite was accepted, with their personal rejoin link. Hosts who created the room without an email are asked for one when sending the first invite. Invites work with any timer but need the Resend variables above.
+
 The countdown is enforced when a room is next opened or used. On a free Render service there is no always-on worker, so an expired turn is advanced on the next request rather than exactly at the deadline. Emails are sent when a move is saved; there are no scheduled reminder emails. Render's free service can sleep when idle, so opening an email link can have a cold start.
 
 ## Current limits
@@ -62,6 +64,6 @@ The countdown is enforced when a room is next opened or used. On a free Render s
 - `game.js` — rules, turn progression, and scoring.
 - `server.js` — HTTP API and static site.
 - `store.js` — local development storage or Supabase REST storage with optimistic version checks.
-- `mail.js` — Resend move notifications.
+- `mail.js` — Resend move, invite, and invite-accepted emails.
 - `public/` — browser UI.
 - `test/` — engine tests.

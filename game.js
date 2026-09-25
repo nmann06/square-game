@@ -73,6 +73,22 @@ export function joinGame(source, { name, email, now = Date.now() }) {
   game.deadline = now + game.timerSeconds * 1000;
   return game;
 }
+export const MAX_INVITES = 3;
+export function inviteFriend(source, index, { email, yourEmail, now = Date.now() }) {
+  const game = copy(source);
+  if (index !== 0) fail('Only the room host can send invites.');
+  if (game.status !== 'waiting') fail('This room is already full.');
+  const invites = game.invites ?? [];
+  if (invites.length >= MAX_INVITES) fail(`You can send up to ${MAX_INVITES} invites per room.`);
+  const host = game.players[0];
+  const to = cleanEmail(email);
+  if (!to) fail('Enter your friend\'s email address.');
+  if (!host.email) host.email = cleanEmail(yourEmail);
+  if (!host.email) fail('Enter your email so we can tell you when they accept.');
+  if (to === host.email) fail('Enter your friend\'s email, not your own.');
+  game.invites = [...invites, { email: to, at: now }];
+  return game;
+}
 export function playerIndex(game, playerToken) {
   return game.players.findIndex(p => p.token === playerToken);
 }
@@ -269,6 +285,8 @@ export function publicGame(game, index) {
     players: game.players.map((p, i) => ({ id: p.id, name: p.name, score: p.score, cardCount: p.hand.length, isYou: i === index })),
     board: game.board, hand: index >= 0 ? game.players[index].hand : [], deckCount: game.deck.length,
     current: game.current, deadline: game.deadline, pendingSwap: index === game.current ? game.pendingSwap : null,
-    lastMove: game.lastMove, winner: game.winner
+    lastMove: game.lastMove, winner: game.winner,
+    // Only the host sees invite details; the joining player never sees emails.
+    ...(index === 0 ? { invites: (game.invites ?? []).map(invite => invite.email), hostHasEmail: Boolean(game.players[0].email) } : {})
   };
 }

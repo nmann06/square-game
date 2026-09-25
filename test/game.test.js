@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, joinGame, newDeck, playCards, swapWild, passTurn, validateBoard, timerValid } from '../game.js';
+import { createGame, joinGame, newDeck, playCards, swapWild, passTurn, validateBoard, timerValid, inviteFriend, publicGame } from '../game.js';
 
 const c = (id, color, shape, number) => ({ id, color, shape, number });
 
@@ -22,6 +22,22 @@ test('timer options and two-player room setup', () => {
   assert.equal(game.players[0].hand.length, 4);
   assert.equal(game.players[1].hand.length, 4);
   assert.equal(game.deadline, 62000);
+});
+
+test('only the host can invite, and needs an email to hear back', () => {
+  const waiting = createGame({ name: 'A', timerSeconds: 60, now: 1000 });
+  assert.throws(() => inviteFriend(waiting, 0, { email: 'b@example.com' }), /your email/);
+  assert.throws(() => inviteFriend(waiting, 1, { email: 'b@example.com', yourEmail: 'a@example.com' }), /host/);
+  assert.throws(() => inviteFriend(waiting, 0, { email: 'a@example.com', yourEmail: 'a@example.com' }), /not your own/);
+  let invited = inviteFriend(waiting, 0, { email: 'B@Example.com', yourEmail: 'a@example.com' });
+  assert.equal(invited.players[0].email, 'a@example.com');
+  assert.deepEqual(publicGame(invited, 0).invites, ['b@example.com']);
+  assert.equal(publicGame(invited, -1).invites, undefined);
+  invited = inviteFriend(invited, 0, { email: 'c@example.com' });
+  invited = inviteFriend(invited, 0, { email: 'd@example.com' });
+  assert.throws(() => inviteFriend(invited, 0, { email: 'e@example.com' }), /up to 3/);
+  const joined = joinGame(invited, { name: 'B', now: 2000 });
+  assert.throws(() => inviteFriend(joined, 0, { email: 'e@example.com' }), /already full/);
 });
 
 test('three-card lines require each property to be all same or all different', () => {

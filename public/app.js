@@ -66,6 +66,11 @@ function render() {
   $('room-subtitle').textContent = `${formatTimer(room.timerSeconds)} per turn · ${room.players.length}/2 players`;
   show('join-panel', room.status === 'waiting' && !room.players.some(p => p.isYou));
   show('waiting-panel', room.status === 'waiting' && room.players.some(p => p.isYou));
+  show('invite-panel', room.status === 'waiting' && Boolean(room.invites));
+  if (room.invites) {
+    show('host-email-field', !room.hostHasEmail);
+    $('invite-status').textContent = room.invites.length ? `Invite sent to ${room.invites.join(', ')}. We'll email you when they accept.` : '';
+  }
   show('game-panel', room.status !== 'waiting');
   if (room.status === 'waiting') return;
   renderScores(); renderBoard(); renderHand(); renderStaged(); renderLastMove(); updateCountdown();
@@ -201,6 +206,16 @@ $('join-button').addEventListener('click', async () => {
     const data = await api(`/api/rooms/${roomId}/join`, { method: 'POST', body: JSON.stringify({ name: $('join-name').value, email: $('join-email').value }) });
     setRoom(data, data.token);
   } catch (error) { setError('room-error', error.message); }
+});
+$('invite-button').addEventListener('click', async () => {
+  setError('invite-error');
+  $('invite-button').disabled = true;
+  try {
+    const data = await api(`/api/rooms/${roomId}/invite`, { method: 'POST', body: JSON.stringify({ email: $('invite-email').value, yourEmail: $('host-email').value }) });
+    $('invite-email').value = '';
+    setRoom(data);
+  } catch (error) { setError('invite-error', error.message); }
+  finally { $('invite-button').disabled = false; }
 });
 async function joinByCode() {
   setError('join-code-error');
