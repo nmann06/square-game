@@ -199,6 +199,16 @@ $('join-button').addEventListener('click', async () => {
     setRoom(data, data.token);
   } catch (error) { setError('room-error', error.message); }
 });
+async function joinByCode() {
+  setError('join-code-error');
+  const code = $('join-code-input').value.trim();
+  if (!/^\d{4}$/.test(code)) return setError('join-code-error', 'Enter the 4-digit room code.');
+  playerToken = localStorage.getItem(`square-token-${code}`);
+  try { setRoom(await api(`/api/rooms/${code}`)); }
+  catch (error) { playerToken = null; setError('join-code-error', error.message); }
+}
+$('join-code-button').addEventListener('click', joinByCode);
+$('join-code-input').addEventListener('keydown', event => { if (event.key === 'Enter') joinByCode(); });
 $('copy-link').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(`${location.origin}${basePath}/room/${roomId}`); $('copy-status').textContent = 'Invite link copied'; }
   catch { $('copy-status').textContent = 'Copy the room URL from your browser'; }
