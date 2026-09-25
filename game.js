@@ -161,7 +161,7 @@ function scoreLines(lines, changed) {
     lines: affected.length
   };
 }
-function finalize(game, index, { base, lots, count, kind }, now) {
+function finalize(game, index, { base, lots, count, kind, cells = [] }, now) {
   const player = game.players[index];
   const hadSwap = Boolean(game.pendingSwap);
   const pending = game.pendingSwap ?? { base: 0, lots: 0 };
@@ -173,7 +173,7 @@ function finalize(game, index, { base, lots, count, kind }, now) {
   player.score += points;
   game.pendingSwap = null;
   game.consecutivePasses = kind === 'pass' && !hadSwap ? game.consecutivePasses + 1 : 0;
-  game.lastMove = { playerId: player.id, playerName: player.name, kind, points, base: combinedBase, lots: combinedLots, at: now };
+  game.lastMove = { playerId: player.id, playerName: player.name, kind, points, base: combinedBase, lots: combinedLots, at: now, cells: pending.spot ? [pending.spot, ...cells] : cells };
   if (emptied || (game.deck.length === 0 && game.consecutivePasses >= 2)) {
     game.status = 'finished';
     game.deadline = null;
@@ -218,7 +218,7 @@ export function playCards(source, index, placements, now = Date.now()) {
   player.hand = player.hand.filter(card => !ids.has(card.id));
   const ended = game.deck.length === 0 && player.hand.length === 0;
   if (!ended) draw(game, player);
-  return finalize(game, index, { ...score, count: placements.length, kind: 'play' }, now);
+  return finalize(game, index, { ...score, count: placements.length, kind: 'play', cells: [...spots] }, now);
 }
 export function swapWild(source, index, { x, y, cardId }, now = Date.now()) {
   const game = copy(source);
@@ -234,7 +234,7 @@ export function swapWild(source, index, { x, y, cardId }, now = Date.now()) {
   const lines = validateBoard(game.board);
   const score = scoreLines(lines, new Set([spot]));
   player.hand[handIndex] = { id: wild.id, wild: true };
-  game.pendingSwap = { base: score.base, lots: score.lots, at: now };
+  game.pendingSwap = { base: score.base, lots: score.lots, at: now, spot };
   return game;
 }
 export function passTurn(source, index, tradeIds = [], now = Date.now()) {

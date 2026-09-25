@@ -66,12 +66,13 @@ test('wild exchange scores two existing lots and a subsequent lot stacks a third
     ], pendingSwap: null, consecutivePasses: 0, timerSeconds: 60, deadline: 100000, lastMove: null
   };
   const swapped = swapWild(game, 0, { x: 0, y: 0, cardId: 'replace' });
-  assert.deepEqual(swapped.pendingSwap, { base: 20, lots: 2, at: swapped.pendingSwap.at });
+  assert.deepEqual(swapped.pendingSwap, { base: 20, lots: 2, at: swapped.pendingSwap.at, spot: '0,0' });
   assert.equal(swapped.players[0].hand.some(card => card.id === 'wild'), true);
   const played = playCards(swapped, 0, [{ x: -6, y: 1, cardId: 'finish' }], 5000);
   assert.equal(played.lastMove.base, 30);
   assert.equal(played.lastMove.lots, 3);
   assert.equal(played.lastMove.points, 240);
+  assert.deepEqual(played.lastMove.cells, ['0,0', '-6,1']);
   assert.equal(played.players[0].score, 240);
 });
 
@@ -85,6 +86,7 @@ test('play must be connected and in one line', () => {
   assert.throws(() => playCards(game, 0, [{ x: 1, y: 0, cardId: 'a' }, { x: 0, y: 1, cardId: 'b' }]), /one row or column/);
   const played = playCards(game, 0, [{ x: 1, y: 0, cardId: 'a' }], 10);
   assert.equal(played.lastMove.points, 3);
+  assert.deepEqual(played.lastMove.cells, ['1,0']);
 });
 
 test('passing can trade a selected card', () => {

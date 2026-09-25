@@ -19,8 +19,8 @@ function element(tag, className, text) {
   if (text !== undefined) node.textContent = text;
   return node;
 }
-function cardElement(card, selectedCard = false, preview = false) {
-  const node = element('span', `tile ${card.wild ? 'wild' : card.color}${selectedCard ? ' selected' : ''}${preview ? ' preview' : ''}`);
+function cardElement(card, selectedCard = false, preview = false, recent = false) {
+  const node = element('span', `tile ${card.wild ? 'wild' : card.color}${selectedCard ? ' selected' : ''}${preview ? ' preview' : ''}${recent ? ' recent' : ''}`);
   const face = card.wild ? (card.as ? symbols[card.as.shape] : '✳') : symbols[card.shape];
   node.append(element('span', '', face));
   if (!card.wild) node.append(element('small', '', String(card.number)));
@@ -91,6 +91,9 @@ function renderBoard() {
   const minX = Math.min(-3, ...xs) - 2, maxX = Math.max(3, ...xs) + 2;
   const minY = Math.min(-3, ...ys) - 2, maxY = Math.max(3, ...ys) + 2;
   parent.style.gridTemplateColumns = `repeat(${maxX - minX + 1}, auto)`;
+  // Highlight the cards the other player placed on their last move.
+  const you = room.players.find(p => p.isYou)?.id;
+  const recent = new Set(room.lastMove && room.lastMove.playerId !== you ? room.lastMove.cells ?? [] : []);
   const fragment = document.createDocumentFragment();
   for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
     const key = `${x},${y}`;
@@ -99,7 +102,7 @@ function renderBoard() {
     const cell = element('button', `cell ${existing || preview ? 'occupied' : 'empty'}`);
     cell.type = 'button';
     cell.setAttribute('aria-label', existing ? `Board card ${existing.wild ? 'wild' : `${existing.color} ${existing.shape} ${existing.number}`} at ${x}, ${y}` : `Empty position ${x}, ${y}`);
-    if (existing) cell.append(cardElement(existing));
+    if (existing) cell.append(cardElement(existing, false, false, recent.has(key)));
     else if (preview) cell.append(cardElement(preview.card, false, true));
     cell.addEventListener('click', () => boardClick(x, y, existing));
     fragment.append(cell);
