@@ -28,11 +28,17 @@ function cardElement(card, selectedCard = false, preview = false) {
   return node;
 }
 async function api(path, options = {}) {
+  if (!window.SQUARE_GAME_API_ORIGIN && /^\/?(?:www\.)?nathanielmann\.ca$/i.test(location.hostname)) {
+    throw new Error('Game API is not configured. Set GAME_API_ORIGIN on the homepage Render service and redeploy it.');
+  }
   const response = await fetch(new URL(basePath + path, apiOrigin), {
     ...options,
     headers: { ...(options.body ? { 'content-type': 'application/json' } : {}), ...(playerToken ? { authorization: `Bearer ${playerToken}` } : {}), ...options.headers }
   });
-  const data = await response.json();
+  const raw = await response.text();
+  let data;
+  try { data = JSON.parse(raw); }
+  catch { throw new Error(`Game server returned ${raw ? 'a non-JSON response' : 'an empty response'} (HTTP ${response.status}). Check GAME_API_ORIGIN and the game service logs.`); }
   if (!response.ok) throw new Error(data.error || 'Request failed.');
   return data;
 }
