@@ -7,7 +7,7 @@ export async function notifyNextPlayer(game) {
   if (!isDayGame(game) || game.status !== 'playing') return;
   const player = game.players[game.current];
   if (!player.email || !mailReady()) return;
-  const link = new URL(`/room/${game.id}`, process.env.BASE_URL);
+  const link = new URL(`room/${game.id}`, process.env.BASE_URL.endsWith('/') ? process.env.BASE_URL : `${process.env.BASE_URL}/`);
   link.searchParams.set('token', player.token);
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',

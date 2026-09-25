@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: square-game
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /square-game/health
+    envVars:
+      - key: BASE_URL
+        value: https://nathanielmann.ca/square-game
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

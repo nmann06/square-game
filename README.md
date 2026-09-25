@@ -20,7 +20,7 @@ Requires Node.js 20 or newer. No npm packages are required.
 npm start
 ```
 
-Open `http://localhost:10000`. Two browser profiles can create and join a room. Local development writes room state to `data/rooms.json` (ignored by Git); this storage is only for development and cannot survive a Render free-service restart.
+Open `http://localhost:10000/square-game`. Two browser profiles can create and join a room. Local development writes room state to `data/rooms.json` (ignored by Git); this storage is only for development and cannot survive a Render free-service restart.
 
 ```bash
 npm test
@@ -30,7 +30,7 @@ npm test
 
 1. Create a Supabase project. Run [`schema.sql`](schema.sql) in its SQL editor. Get the project URL and a **secret** API key. The secret key must never go in browser code or Git.
 2. Create a Resend API key and verify a sender domain or sender address. Email uses Resend's HTTPS API because Render's free web services block outbound SMTP ports 25, 465, and 587.
-3. Create a Render **Web Service** connected to this repository. Use a Node runtime, build command `npm install`, start command `npm start`, and the Free instance type.
+3. Create a Render Blueprint from [`render.yaml`](render.yaml). It creates a Node web service. Keep its assigned `onrender.com` URL for the static homepage's API configuration.
 4. Set these environment variables in Render:
 
    | Variable | Value |
@@ -39,9 +39,11 @@ npm test
    | `SUPABASE_SECRET_KEY` | Your server-only secret key |
    | `RESEND_API_KEY` | Your Resend API key |
    | `EMAIL_FROM` | A verified sender, such as `Square Game <games@example.com>` |
-   | `BASE_URL` | Your public site URL, such as `https://square-game.onrender.com` |
+   | `BASE_URL` | `https://nathanielmann.ca/square-game` (configured in `render.yaml`) |
 
-5. Open `/health` to check that `durableStorage` and `emailConfigured` are both `true`. Then test a 1-day room with two email addresses.
+5. Open `/square-game/health` on the game service to check that `durableStorage` and `emailConfigured` are both `true`. Then test a 1-day room with two email addresses through the public domain.
+
+The existing `nathanielmann.ca` homepage remains a Render static site. It hosts a copy of the game's browser files under `/square-game` and calls this service's API from the browser. Set the homepage's `GAME_API_ORIGIN` environment variable to this service's `onrender.com` origin and redeploy the homepage. This service does not claim the root domain.
 
 The host chooses a 1–10 minute timer or a 1, 2, 3, or 7 day timer. Day rooms require persistent storage and email configuration. After a completed move, the next player receives an email with a personal rejoin link. Treat that link as a password: anyone holding it can play as that player. The general invite link has no player token and is safe to share with the intended opponent.
 

@@ -10,10 +10,16 @@ import { createRoom, getRoom, updateRoom, durableStorage } from './store.js';
 import { mailReady, notifyNextPlayer } from './mail.js';
 
 const port = Number(process.env.PORT || 10000);
+const basePath = '/square-game';
+const allowedOrigins = new Set([
+  'https://nathanielmann.ca', 'https://www.nathanielmann.ca',
+  'http://localhost:8080', 'http://127.0.0.1:8080'
+]);
 const root = fileURLToPath(new URL('./public/', import.meta.url));
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/config.js', ['config.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']]
 ]);
 
@@ -53,16 +59,44 @@ async function sendNotification(game) {
   catch (error) { console.error(error); return false; }
 }
 async function handler(req, res) {
-  const pathname = new URL(req.url, 'http://localhost').pathname;
-  if (req.method === 'GET' && (files.has(pathname) || /^\/room\/[\w-]+$/.test(pathname))) {
-    const [file, type] = files.get(pathname) || files.get('/');
+  const url = new URL(req.url, 'http://localhost');
+  const pathname = url.pathname;
+  if (pathname.startsWith(basePath + '/api/')) {
+    const origin = req.headers.origin;
+    if (allowedOrigins.has(origin)) {
+      res.setHeader('access-control-allow-origin', origin);
+      res.setHeader('vary', 'Origin');
+      res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+      res.setHeader('access-control-allow-headers', 'authorization, content-type');
+    }
+    if (req.method === 'OPTIONS') {
+      res.writeHead(allowedOrigins.has(origin) ? 204 : 403);
+      res.end();
+      return;
+    }
+  }
+  const prefix = pathname.split('/')[1];
+  if (prefix && /^(?:square[-_ ]?games?|sqaure[-_ ]?games?)$/i.test(decodeURIComponent(prefix)) && prefix !== 'square-game') {
+    res.writeHead(301, { location: `${basePath}${pathname.slice(prefix.length + 1)}${url.search}`, 'cache-control': 'no-store' });
+    res.end();
+    return;
+  }
+  if (pathname === basePath + '/') {
+    res.writeHead(301, { location: `${basePath}${url.search}`, 'cache-control': 'no-store' });
+    res.end();
+    return;
+  }
+  const path = pathname === basePath ? '/' : pathname.startsWith(basePath + '/') ? pathname.slice(basePath.length) : null;
+  if (path === null) return send(res, 404, { error: 'Not found.' });
+  if (req.method === 'GET' && (files.has(path) || /^\/room\/[\w-]+$/.test(path))) {
+    const [file, type] = files.get(path) || files.get('/');
     const content = await readFile(join(root, file));
     res.writeHead(200, { 'content-type': type, 'cache-control': file === 'index.html' ? 'no-cache' : 'public, max-age=3600', 'x-content-type-options': 'nosniff' });
     res.end(content);
     return;
   }
-  if (pathname === '/health') return send(res, 200, { ok: true, durableStorage, emailConfigured: mailReady() });
-  if (pathname === '/api/rooms' && req.method === 'POST') {
+  if (path === '/health') return send(res, 200, { ok: true, durableStorage, emailConfigured: mailReady() });
+  if (path === '/api/rooms' && req.method === 'POST') {
     const input = await body(req);
     if (Number(input.timerSeconds) >= 86400 && (!durableStorage || !mailReady())) {
       return send(res, 503, { error: 'Day-length games require Supabase storage and Resend email configuration.' });
@@ -71,7 +105,7 @@ async function handler(req, res) {
     await createRoom(game);
     return send(res, 201, { room: publicGame(game, 0), token: game.players[0].token });
   }
-  const match = pathname.match(/^\/api\/rooms\/([\w-]+)(?:\/(join|action))?$/);
+  const match = path.match(/^\/api\/rooms\/([\w-]+)(?:\/(join|action))?$/);
   if (!match) return send(res, 404, { error: 'Not found.' });
   const [, id, operation] = match;
   const row = await loadFresh(id);

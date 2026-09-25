@@ -1,6 +1,8 @@
 const $ = id => document.getElementById(id);
+const basePath = '/square-game';
+const apiOrigin = window.SQUARE_GAME_API_ORIGIN || location.origin;
 let room = null;
-let roomId = location.pathname.match(/^\/room\/([\w-]+)$/)?.[1] ?? null;
+let roomId = location.pathname.match(/^\/square-game\/room\/([\w-]+)$/)?.[1] ?? null;
 let playerToken = null;
 let selected = null;
 let staged = [];
@@ -26,7 +28,7 @@ function cardElement(card, selectedCard = false, preview = false) {
   return node;
 }
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(new URL(basePath + path, apiOrigin), {
     ...options,
     headers: { ...(options.body ? { 'content-type': 'application/json' } : {}), ...(playerToken ? { authorization: `Bearer ${playerToken}` } : {}), ...options.headers }
   });
@@ -41,7 +43,7 @@ function setRoom(data, newToken) {
     playerToken = newToken;
     localStorage.setItem(`square-token-${roomId}`, playerToken);
   }
-  history.replaceState(null, '', `/room/${roomId}`);
+  history.replaceState(null, '', `${basePath}/room/${roomId}`);
   render();
 }
 function formatTimer(seconds) {
@@ -192,7 +194,7 @@ $('join-button').addEventListener('click', async () => {
   } catch (error) { setError('room-error', error.message); }
 });
 $('copy-link').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(`${location.origin}/room/${roomId}`); $('copy-status').textContent = 'Invite link copied'; }
+  try { await navigator.clipboard.writeText(`${location.origin}${basePath}/room/${roomId}`); $('copy-status').textContent = 'Invite link copied'; }
   catch { $('copy-status').textContent = 'Copy the room URL from your browser'; }
 });
 $('play-button').addEventListener('click', () => act({ type: 'play', placements: staged.map(({ card, ...place }) => place) }));
@@ -203,7 +205,7 @@ $('trade-mode').addEventListener('change', () => { selected = null; tradeIds.cle
 if (roomId) {
   const queryToken = new URLSearchParams(location.search).get('token');
   playerToken = queryToken || localStorage.getItem(`square-token-${roomId}`);
-  if (queryToken) { localStorage.setItem(`square-token-${roomId}`, queryToken); history.replaceState(null, '', `/room/${roomId}`); }
+  if (queryToken) { localStorage.setItem(`square-token-${roomId}`, queryToken); history.replaceState(null, '', `${basePath}/room/${roomId}`); }
   refresh();
 }
 setInterval(updateCountdown, 1000);
