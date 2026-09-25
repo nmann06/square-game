@@ -84,12 +84,9 @@ function selectedCard(player, id) {
   if (index < 0) fail('Card is not in your hand.');
   return [player.hand[index], index];
 }
-function normalizeCard(card, as) {
+function normalizeCard(card) {
   if (!card.wild) return card;
-  if (!as || !COLORS.includes(as.color) || !SHAPES.includes(as.shape) || ![1, 2, 3, 4].includes(as.number)) {
-    fail('Choose a color, shape, and number for the wild card.');
-  }
-  return { ...card, as: { color: as.color, shape: as.shape, number: as.number } };
+  return { id: card.id, wild: true };
 }
 function property(card, field) { return card.wild ? card.as?.[field] : card[field]; }
 function validLine(cards) {
@@ -133,7 +130,26 @@ export function boardLines(board) {
 }
 export function validateBoard(board) {
   const lines = boardLines(board);
-  for (const line of lines) if (!validLine(line.cells.map(cell => cell.card))) fail('That makes an invalid line or a line longer than four.');
+  if (lines.some(line => line.cells.length > 4)) fail('That makes an invalid line or a line longer than four.');
+  const wilds = Object.values(board).filter(card => card.wild);
+  const choices = [];
+  for (const color of COLORS) for (const shape of SHAPES) for (let number = 1; number <= 4; number++) choices.push({ color, shape, number });
+  const original = wilds.map(card => card.as);
+  const legal = () => lines.every(line => validLine(line.cells.map(cell => cell.card)));
+  function assign(index) {
+    if (index === wilds.length) return legal();
+    const preferred = wilds[index].as;
+    const candidates = preferred ? [preferred, ...choices.filter(choice => choice.color !== preferred.color || choice.shape !== preferred.shape || choice.number !== preferred.number)] : choices;
+    for (const choice of candidates) {
+      wilds[index].as = choice;
+      if (assign(index + 1)) return true;
+    }
+    return false;
+  }
+  if (!assign(0)) {
+    wilds.forEach((card, index) => { if (original[index]) card.as = original[index]; else delete card.as; });
+    fail('That makes an invalid line or a line longer than four.');
+  }
   return lines;
 }
 function scoreLines(lines, changed) {
@@ -180,7 +196,7 @@ export function playCards(source, index, placements, now = Date.now()) {
     if (game.board[spot] || spots.has(spot)) fail('Each card needs an empty, unique space.');
     if (ids.has(place.cardId)) fail('A card can only be played once.');
     const [card] = selectedCard(player, place.cardId);
-    game.board[spot] = normalizeCard(card, place.as);
+    game.board[spot] = normalizeCard(card);
     spots.add(spot); ids.add(place.cardId); positions.push({ x, y });
   }
   if (new Set(positions.map(p => p.x)).size !== 1 && new Set(positions.map(p => p.y)).size !== 1) fail('Cards played together must be in one row or column.');

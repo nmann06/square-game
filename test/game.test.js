@@ -33,6 +33,24 @@ test('three-card lines require each property to be all same or all different', (
   }), /invalid line/);
 });
 
+test('a wild can be reinterpreted on a later move but is one card across crossing lines', () => {
+  const game = {
+    status: 'playing', current: 0,
+    board: { '0,0': { id: 'wild', wild: true, as: { color: 'red', shape: 'circle', number: 1 } }, '1,0': c('blue', 'blue', 'square', 2) },
+    deck: [], players: [{ id: 'p1', hand: [c('new', 'red', 'triangle', 3), c('extra', 'yellow', 'star', 4)], score: 0 }, { id: 'p2', hand: [], score: 0 }],
+    pendingSwap: null, consecutivePasses: 0, timerSeconds: 60, deadline: 10000
+  };
+  const played = playCards(game, 0, [{ x: 2, y: 0, cardId: 'new' }], 100);
+  assert.notEqual(played.board['0,0'].as.color, 'red');
+  assert.equal(played.lastMove.points, 5);
+  const conflict = {
+    '0,0': { id: 'crossing', wild: true },
+    '1,0': c('h1', 'red', 'circle', 1), '2,0': c('h2', 'red', 'circle', 1),
+    '0,1': c('v1', 'blue', 'square', 2), '0,2': c('v2', 'blue', 'square', 2)
+  };
+  assert.throws(() => validateBoard(conflict), /invalid line/);
+});
+
 test('wild exchange scores two existing lots and a subsequent lot stacks a third double', () => {
   const wild = { id: 'wild', wild: true, as: { color: 'yellow', shape: 'star', number: 4 } };
   const board = {

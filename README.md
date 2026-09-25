@@ -6,11 +6,11 @@ A two-player, room-based browser card game based on the [Iota rules](https://www
 
 Before playing cards, select a regular card from your hand and click a wild card already on the board. If the replacement is legal, you score every line containing the replacement as though you placed it. The wild card goes into your hand for the rest of your turn. All four-card lots involved in the exchange contribute a doubling multiplier to the **combined** exchange and main-move score. For example, two lots at exchange plus one lot when playing cards means `(exchange line points + play line points) × 2 × 2 × 2`.
 
-Wild cards played from a hand have a fixed chosen color, shape, and number on the board and a face value of zero. The game also doubles the turn score when all four cards are played and doubles the final move when a player empties their hand after the deck is depleted.
+Wild cards have a face value of zero. The server gives each wild one consistent identity across all of its lines after every move and may reinterpret it on later turns if needed. The game also doubles the turn score when all four cards are played and doubles the final move when a player empties their hand after the deck is depleted.
 
 ## Server-side validation
 
-The browser submits only a proposed move, pass, or wild exchange. The server holds the deck, hands, board, turn deadline, and scores. Every action requires that player's private token. The server checks turn ownership, card ownership, placement coordinates, row/column and connection rules, wild identity, trade limits, and all affected lines before it changes room state. It calculates scores itself and rejects fabricated cards or client-supplied score changes. Supabase writes include an expected room version, so two competing requests cannot both commit against the same state. The browser only receives its own hand; no player email or token is included in public room state.
+The browser submits only a proposed move, pass, or wild exchange. The server holds the deck, hands, board, turn deadline, and scores. Every action requires that player's private token. The server checks turn ownership, card ownership, placement coordinates, row/column and connection rules, wild consistency, trade limits, and all affected lines before it changes room state. It calculates scores itself and rejects fabricated cards or client-supplied score changes. Supabase writes include an expected room version, so two competing requests cannot both commit against the same state. The browser only receives its own hand; no player email or token is included in public room state.
 
 ## Run locally
 

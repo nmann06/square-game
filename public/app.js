@@ -126,7 +126,6 @@ function renderControls() {
   $('pass-button').disabled = !canAct;
   $('undo-button').disabled = !canAct || staged.length === 0;
   $('pass-button').textContent = $('trade-mode').checked && tradeIds.size ? `Trade ${tradeIds.size} and pass` : 'Pass turn';
-  show('wild-controls', Boolean(room?.hand.find(card => card.id === selected)?.wild) && !$('trade-mode').checked);
 }
 function boardClick(x, y, existing) {
   if (!room || room.status !== 'playing' || !currentIsYou() || busy || !selected || $('trade-mode').checked) return;
@@ -137,8 +136,7 @@ function boardClick(x, y, existing) {
     return;
   }
   if (existing || staged.some(p => p.x === x && p.y === y) || staged.length === 4) return;
-  const as = card.wild ? { color: $('wild-color').value, shape: $('wild-shape').value, number: Number($('wild-number').value) } : undefined;
-  staged.push({ x, y, cardId: card.id, as, card: as ? { ...card, as } : card });
+  staged.push({ x, y, cardId: card.id, card });
   selected = null;
   renderBoard(); renderHand(); renderStaged();
 }
