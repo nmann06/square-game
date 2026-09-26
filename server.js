@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createGame, joinGame, playerIndex, publicGame, playCards, swapWild,
-  passTurn, advanceExpired, roomCode, inviteFriend, accountSummary
+  passTurn, advanceExpired, roomCode, inviteFriend, accountSummary, changePause, isDayGame
 } from './game.js';
-import { createRoom, getRoom, updateRoom, durableStorage, getLoginChallenge, saveLoginChallenge, updateLoginChallenge, verifyLoginChallenge, listAccountRooms } from './store.js';
+import { createRoom, getRoom, updateRoom, deleteRoom, durableStorage, getLoginChallenge, saveLoginChallenge, updateLoginChallenge, verifyLoginChallenge, listAccountRooms } from './store.js';
 import { mailReady, notifyNextPlayer, sendInvite, notifyInviteAccepted, sendFeedback, sendSignInCode } from './mail.js';
 import { accountReady, accountEmail, newCode, codeHash, issueSession, readSession } from './account.js';
 
@@ -53,6 +53,10 @@ async function body(req) {
   catch { throw new Error('Invalid JSON.'); }
 }
 function auth(req, game) {
+  if (isDayGame(game)) {
+    const email = readSession(req.headers['x-account-token']);
+    return email ? game.players.findIndex(player => player.accountEmail === email) : -1;
+  }
   const token = req.headers.authorization?.replace(/^Bearer /, '');
   const index = playerIndex(game, token);
   if (index >= 0) return index;
@@ -82,7 +86,7 @@ async function handler(req, res) {
     if (allowedRequestOrigin(req)) {
       res.setHeader('access-control-allow-origin', origin);
       res.setHeader('vary', 'Origin');
-      res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+      res.setHeader('access-control-allow-methods', 'GET, POST, DELETE, OPTIONS');
       res.setHeader('access-control-allow-headers', 'authorization, content-type, x-account-token');
     }
     if (req.method === 'OPTIONS') {
@@ -178,11 +182,12 @@ async function handler(req, res) {
   }
   if (path === '/api/rooms' && req.method === 'POST') {
     const input = await body(req);
+    const verifiedEmail = readSession(req.headers['x-account-token']);
+    if (Number(input.timerSeconds) >= 86400 && !verifiedEmail) return send(res, 401, { error: 'Sign in to play day-length games.' });
     if (Number(input.timerSeconds) >= 86400 && (!durableStorage || !mailReady())) {
       return send(res, 503, { error: 'Day-length games require Supabase storage and Resend email configuration.' });
     }
-    const verifiedEmail = readSession(req.headers['x-account-token']);
-    const game = createGame({ ...input, accountEmail: verifiedEmail ?? undefined, email: verifiedEmail ?? input.email, timerSeconds: Number(input.timerSeconds) });
+    const game = createGame({ ...input, accountEmail: verifiedEmail ?? undefined, email: verifiedEmail ?? '', timerSeconds: Number(input.timerSeconds ?? 120) });
     let created = false;
     for (let attempt = 0; attempt < 20 && !created; attempt++) {
       if (attempt) game.id = roomCode();
@@ -197,6 +202,12 @@ async function handler(req, res) {
   const row = await loadFresh(id);
   if (!row) return send(res, 404, { error: 'Room not found.' });
   const game = row.state;
+  if (req.method === 'DELETE' && !operation) {
+    if (auth(req, game) !== 0) return send(res, 403, { error: 'Only the host can delete this room.' });
+    if (game.status !== 'waiting' || game.players.length !== 1) return send(res, 409, { error: 'A room can only be deleted before another player joins.' });
+    if (!(await deleteRoom(id, row.version))) return send(res, 409, { error: 'Room changed. Please retry.' });
+    return send(res, 200, { deleted: true });
+  }
   if (req.method === 'GET' && !operation) return send(res, 200, { room: publicGame(game, auth(req, game)) });
   if (req.method === 'POST' && operation === 'link-account') {
     const email = readSession(req.headers['x-account-token']);
@@ -224,6 +235,7 @@ async function handler(req, res) {
   if (req.method === 'POST' && operation === 'join') {
     const input = await body(req);
     const verifiedEmail = readSession(req.headers['x-account-token']);
+    if (isDayGame(game) && !verifiedEmail) return send(res, 401, { error: 'Sign in to play day-length games.' });
     const next = joinGame(game, { ...input, accountEmail: verifiedEmail ?? undefined, email: verifiedEmail ?? input.email });
     if (!(await updateRoom(id, row.version, next))) return send(res, 409, { error: 'Room changed. Please retry.' });
     if (next.invites?.length) {
@@ -250,9 +262,10 @@ async function handler(req, res) {
     if (input.type === 'play') next = playCards(game, index, input.placements);
     else if (input.type === 'swap') next = swapWild(game, index, input);
     else if (input.type === 'pass') next = passTurn(game, index, input.tradeIds ?? []);
+    else if (['request-pause', 'accept-pause', 'cancel-pause', 'resume'].includes(input.type)) next = changePause(game, index, input.type);
     else throw new Error('Unknown action.');
     if (!(await updateRoom(id, row.version, next))) return send(res, 409, { error: 'Room changed. Please retry.' });
-    const notified = input.type === 'swap' ? null : await sendNotification(next);
+    const notified = ['play', 'pass'].includes(input.type) || (input.type === 'resume' && next.status === 'playing') ? await sendNotification(next) : null;
     return send(res, 200, { room: publicGame(next, index), notificationSent: notified });
   }
   return send(res, 405, { error: 'Method not allowed.' });

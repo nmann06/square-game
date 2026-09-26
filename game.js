@@ -35,9 +35,10 @@ export function timerValid(seconds) {
   return Number.isInteger(seconds) && ((seconds >= 60 && seconds <= 600 && seconds % 60 === 0) || TIMER_OPTIONS.includes(seconds));
 }
 export function isDayGame(game) { return game.timerSeconds >= 86400; }
-export function createGame({ name, email, accountEmail, timerSeconds, now = Date.now() }) {
+export function createGame({ name, email, accountEmail, timerSeconds = 120, now = Date.now() }) {
   if (!timerValid(timerSeconds)) fail('Choose a timer from 1–10 minutes or 1, 2, 3, or 7 days.');
-  if (timerSeconds >= 86400 && !email) fail('Email is required for day-length games.');
+  if (timerSeconds >= 86400 && !accountEmail) fail('Sign in to play day-length games.');
+  email = accountEmail || email;
   const deck = newDeck();
   const starter = deck.pop();
   // The printed game starts with one face-up card. Give a wild starter one fixed identity.
@@ -64,7 +65,8 @@ function cleanEmail(email) {
 export function joinGame(source, { name, email, accountEmail, now = Date.now() }) {
   const game = copy(source);
   if (game.status !== 'waiting') fail('This room is already full.');
-  if (isDayGame(game) && !email) fail('Email is required for day-length games.');
+  if (isDayGame(game) && !accountEmail) fail('Sign in to play day-length games.');
+  email = accountEmail || email;
   if (accountEmail && game.players[0].accountEmail === accountEmail) fail('You cannot join your own room.');
   const player = { id: token(9), token: token(), name: cleanName(name), email: cleanEmail(email), ...(accountEmail ? { accountEmail } : {}), hand: [], score: 0 };
   game.players.push(player);
@@ -179,6 +181,7 @@ function scoreLines(lines, changed) {
   };
 }
 function finalize(game, index, { base, lots, count, kind, cells = [] }, now) {
+  game.pauseRequestedBy = null;
   const player = game.players[index];
   const hadSwap = Boolean(game.pendingSwap);
   const pending = kind === 'timeout' ? { base: 0, lots: 0 } : game.pendingSwap ?? { base: 0, lots: 0 };
@@ -288,8 +291,39 @@ export function advanceExpired(source, now = Date.now()) {
   }
   return game;
 }
+export function changePause(source, index, type, now = Date.now()) {
+  const game = copy(source);
+  if (index !== 0 && index !== 1 || !game.players[index]) fail('Only players can pause or resume.');
+  if (type === 'request-pause') {
+    if (game.status !== 'playing') fail('This game is not active.');
+    if (game.pauseRequestedBy != null) fail('A pause is already requested.');
+    game.pauseRequestedBy = index;
+  } else if (type === 'accept-pause') {
+    if (game.status !== 'playing' || game.pauseRequestedBy == null || game.pauseRequestedBy === index) fail('Only the other player can accept a pause.');
+    game.remainingTurnMs = Math.max(0, game.deadline - now);
+    game.deadline = null;
+    game.status = 'paused';
+    game.pauseRequestedBy = null;
+    game.resumeAccepted = [];
+  } else if (type === 'cancel-pause') {
+    if (game.status !== 'playing' || game.pauseRequestedBy == null) fail('No pause is requested.');
+    game.pauseRequestedBy = null;
+  } else if (type === 'resume') {
+    if (game.status !== 'paused') fail('This game is not paused.');
+    game.resumeAccepted = [...new Set([...(game.resumeAccepted ?? []), index])];
+    if (game.resumeAccepted.length === 2) {
+      game.status = 'playing';
+      game.deadline = now + game.remainingTurnMs;
+      delete game.remainingTurnMs;
+      game.resumeAccepted = [];
+    }
+  } else fail('Unknown pause action.');
+  return game;
+}
 export function publicGame(game, index) {
   return {
+    pauseRequestedBy: game.pauseRequestedBy ?? null, resumeAccepted: game.resumeAccepted ?? [],
+    remainingTurnMs: game.remainingTurnMs ?? null,
     id: game.id, status: game.status, timerSeconds: game.timerSeconds,
     players: game.players.map((p, i) => ({ id: p.id, name: p.name, score: p.score, cardCount: p.hand.length, isYou: i === index })),
     board: game.board, hand: index >= 0 ? game.players[index].hand : [], deckCount: game.deck.length,

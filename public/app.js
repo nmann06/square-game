@@ -18,7 +18,7 @@ let staged = [];
 let previewStatus = { status: 'empty', message: 'Place tiles to preview your score.' };
 let previewRevision = 0;
 let tradeIds = new Set();
-let timerSeconds = 300;
+let timerSeconds = 120;
 let busy = false;
 const symbols = { circle: '●', square: '■', triangle: '▲', star: '✦' };
 
@@ -75,7 +75,7 @@ function render() {
   show('room', Boolean(roomId));
   if (!room) return;
   $('room-code').textContent = room.id;
-  $('room-heading').textContent = room.status === 'waiting' ? 'Waiting for a friend' : room.status === 'finished' ? 'Game complete' : currentIsYou() ? 'Your move' : `${room.players[room.current]?.name}'s move`;
+  $('room-heading').textContent = room.status === 'waiting' ? 'Waiting for a friend' : room.status === 'finished' ? 'Game complete' : room.status === 'paused' ? 'Game paused' : currentIsYou() ? 'Your move' : `${room.players[room.current]?.name}'s move`;
   $('room-subtitle').textContent = `${formatTimer(room.timerSeconds)} per turn · ${room.players.length}/2 players`;
   show('join-panel', room.status === 'waiting' && !room.players.some(p => p.isYou));
   show('waiting-panel', room.status === 'waiting' && room.players.some(p => p.isYou));
@@ -84,13 +84,17 @@ function render() {
     show('host-email-field', !room.hostHasEmail);
     $('invite-status').textContent = room.invites.length ? `Invite sent to ${room.invites.join(', ')}. We'll email you when they accept.` : '';
   }
+  show('delete-room', room.status === 'waiting' && room.players.length === 1 && room.players[0].isYou);
+  show('room-sign-in', room.timerSeconds >= 86400 && !room.players.some(p => p.isYou));
+  $('join-button').disabled = room.timerSeconds >= 86400 && !accountToken;
+  renderPauseControls();
   show('game-panel', room.status !== 'waiting');
   if (room.status === 'waiting') return;
   renderScores(); renderBoard(); renderHand(); renderStaged(); renderLastMove(); updateCountdown();
 }
 function useAccount(email) {
   signedInEmail = email;
-  for (const id of ['create-email', 'join-email', 'host-email']) {
+  for (const id of ['host-email']) {
     $(id).value = email;
     $(id).readOnly = true;
   }
@@ -117,7 +121,7 @@ async function refreshAccount() {
     for (const game of data.currentGames) {
       const link = element('a'); link.href = `${basePath}/room/${game.id}`;
       link.append(element('span', '', `Room ${game.id} · ${game.opponent}`),
-        element('small', '', game.status === 'waiting' ? 'Waiting for a friend' : game.yourTurn ? 'Your turn' : "Opponent's turn"));
+        element('small', '', game.status === 'waiting' ? 'Waiting for a friend' : game.status === 'paused' ? 'Paused' : game.yourTurn ? 'Your turn' : "Opponent's turn"));
       list.append(link);
     }
     const finished = $('account-finished-games'); finished.replaceChildren();
@@ -251,6 +255,7 @@ async function updatePreview() {
   renderBoard();
 }
 function renderControls() {
+  if (room) renderPauseControls();
   const canAct = room?.status === 'playing' && currentIsYou() && !busy;
   $('play-button').disabled = !canAct || previewStatus.status !== 'legal';
   $('pass-button').disabled = !canAct;
@@ -270,6 +275,35 @@ function boardClick(x, y, existing) {
   selected = null;
   renderBoard(); renderHand(); renderStaged();
 }
+function renderPauseControls() {
+  const index = room.players.findIndex(player => player.isYou);
+  const visible = index >= 0 && ['playing', 'paused'].includes(room.status);
+  show('pause-controls', visible);
+  if (!visible) return;
+  const requested = room.pauseRequestedBy != null;
+  const mine = room.pauseRequestedBy === index;
+  const accepted = room.resumeAccepted.includes(index);
+  $('pause-status').textContent = room.status === 'paused'
+    ? accepted ? 'Waiting for your opponent to resume.' : 'Game paused. Both players must agree to resume.'
+    : requested ? mine ? 'Pause requested. The timer runs until your opponent accepts.' : 'Your opponent requested a pause. The timer is still running.' : 'Both players must agree to pause.';
+  $('pause-button').textContent = room.status === 'paused' ? 'Agree to resume' : requested ? mine ? 'Pause requested' : 'Accept pause' : 'Request pause';
+  $('pause-button').disabled = busy || (room.status === 'paused' ? accepted : requested && mine);
+  show('cancel-pause', room.status === 'playing' && requested);
+  $('cancel-pause').textContent = mine ? 'Cancel request' : 'Decline pause';
+  $('cancel-pause').disabled = busy;
+}
+$('pause-button').addEventListener('click', () => act({ type: room.status === 'paused' ? 'resume' : room.pauseRequestedBy != null ? 'accept-pause' : 'request-pause' }));
+$('cancel-pause').addEventListener('click', () => act({ type: 'cancel-pause' }));
+$('delete-room').addEventListener('click', async () => {
+  if (busy) return;
+  busy = true; $('delete-room').disabled = true;
+  try {
+    await api(`/api/rooms/${roomId}`, { method: 'DELETE' });
+    localStorage.removeItem(`square-token-${roomId}`);
+    location.assign(basePath);
+  } catch (error) { setError('room-error', error.message); }
+  finally { busy = false; $('delete-room').disabled = false; }
+});
 async function act(input) {
   if (busy) return;
   busy = true; renderControls(); setError('room-error');
@@ -287,12 +321,14 @@ async function act(input) {
 function updateCountdown() {
   if (!room || room.status === 'waiting') return;
   if (room.status === 'finished') { $('countdown').textContent = room.finishReason === 'missed-turns' ? 'Tie · missed turns' : room.winner ? `${room.players.find(p => p.id === room.winner)?.name} wins` : 'Tie game'; return; }
+  if (room.status === 'paused') { $('countdown').textContent = 'Paused'; return; }
   const left = Math.max(0, Math.ceil((room.deadline - Date.now()) / 1000));
   const days = Math.floor(left / 86400), hours = Math.floor((left % 86400) / 3600), minutes = Math.floor((left % 3600) / 60), seconds = left % 60;
   $('countdown').textContent = days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 async function refresh() {
   if (!roomId || busy) return;
+  accountToken = localStorage.getItem('square-account-token');
   try { room = (await api(`/api/rooms/${roomId}`)).room; render(); setError('room-error'); }
   catch (error) { setError('room-error', error.message); }
 }
@@ -310,7 +346,7 @@ document.querySelectorAll('[data-days]').forEach(button => button.addEventListen
 $('create-button').addEventListener('click', async () => {
   setError('setup-error');
   try {
-    const data = await api('/api/rooms', { method: 'POST', body: JSON.stringify({ name: $('create-name').value, email: $('create-email').value, timerSeconds }) });
+    const data = await api('/api/rooms', { method: 'POST', body: JSON.stringify({ name: $('create-name').value, timerSeconds }) });
     localStorage.setItem('square-player-name', $('create-name').value.trim());
     setRoom(data, data.token);
   } catch (error) { setError('setup-error', error.message); }
@@ -318,7 +354,7 @@ $('create-button').addEventListener('click', async () => {
 $('join-button').addEventListener('click', async () => {
   setError('room-error');
   try {
-    const data = await api(`/api/rooms/${roomId}/join`, { method: 'POST', body: JSON.stringify({ name: $('join-name').value, email: $('join-email').value }) });
+    const data = await api(`/api/rooms/${roomId}/join`, { method: 'POST', body: JSON.stringify({ name: $('join-name').value }) });
     localStorage.setItem('square-player-name', $('join-name').value.trim());
     setRoom(data, data.token);
   } catch (error) { setError('room-error', error.message); }
@@ -386,7 +422,7 @@ $('code-verify-form').addEventListener('submit', async event => {
 $('account-sign-out').addEventListener('click', () => {
   const email = signedInEmail;
   localStorage.removeItem('square-account-token'); accountToken = null; signedInEmail = null;
-  for (const id of ['create-email', 'join-email', 'host-email']) {
+  for (const id of ['host-email']) {
     $(id).readOnly = false;
     if ($(id).value === email) $(id).value = '';
   }

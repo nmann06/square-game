@@ -31,7 +31,7 @@
             </div>
             <div id="account-profile" class="hidden">
               <div class="account-heading"><div><p class="eyebrow">YOUR SQUARE GAME ACCOUNT</p><h2>Your account</h2><p id="account-identity" class="account-identity"></p></div><button id="account-sign-out" class="account-sign-out" type="button">Sign out</button></div>
-              <div class="account-stats"><div><span>WIN %</span><strong id="account-win-percent">0%</strong></div><div><span>GAMES PLAYED</span><strong id="account-games-played">0</strong></div><div><span>CURRENT GAMES</span><strong id="account-current-count">0</strong></div></div>
+              <div class="account-stats"><div><span title="Wins divided by finished games">WIN % (FINISHED)</span><strong id="account-win-percent">0%</strong></div><div><span>GAMES PLAYED</span><strong id="account-games-played">0</strong></div><div><span>CURRENT GAMES</span><strong id="account-current-count">0</strong></div></div>
               <a id="account-expand" class="account-expand" href="/square-game/account" target="_blank" rel="noopener">View full history ↗</a>
             </div>
           </section>
@@ -39,11 +39,10 @@
         <div class="setup card-panel">
           <h2>Create a room</h2>
           <label>Your name <input id="create-name" maxlength="30" placeholder="Player one" autocomplete="name"></label>
-          <label>Email <input id="create-email" type="email" placeholder="you@example.com" autocomplete="email"><small>Required for day-length games so we can email your turn link.</small></label>
-          <div class="timer-head"><span>Turn timer</span><strong id="minute-label">5 minutes</strong></div>
-          <input id="timer-slider" type="range" min="1" max="10" step="1" value="5" aria-label="Turn timer in minutes">
+          <div class="timer-head"><span>Turn timer</span><strong id="minute-label">2 minutes</strong></div>
+          <input id="timer-slider" type="range" min="1" max="10" step="1" value="2" aria-label="Turn timer in minutes">
           <div class="day-buttons" role="group" aria-label="Day timers"><button data-days="1">1 day</button><button data-days="2">2 days</button><button data-days="3">3 days</button><button data-days="7">7 days</button></div>
-          <p id="timer-help" class="fine">Choose a minute timer, or pick a day for email turns.</p>
+          <p id="timer-help" class="fine">Day-length games require sign-in. Turn emails go to your account address.</p>
           <button id="create-button" class="primary wide">Create room <span>↗</span></button>
           <p id="setup-error" class="error" role="alert"></p>
           <div class="join-code">
@@ -66,12 +65,12 @@
       <section id="room" class="room hidden">
         <div class="room-header">
           <div><p class="eyebrow">PRIVATE ROOM <span id="room-code"></span></p><h1 id="room-heading">Waiting for a friend</h1><p id="room-subtitle"></p></div>
-          <div class="room-actions"><button id="copy-link" class="secondary">Copy invite link</button><span id="copy-status" class="fine"></span></div>
+          <div class="room-actions"><button id="delete-room" class="secondary hidden">Delete room</button><button id="copy-link" class="secondary">Copy invite link</button><span id="copy-status" class="fine"></span></div>
         </div>
+        <p id="room-sign-in" class="fine hidden">Sign in to play day-length games. <a href="/square-game/account" target="_blank" rel="noopener">Sign in</a>, then return here.</p>
         <div id="join-panel" class="card-panel join-panel hidden">
           <h2>Join this room</h2>
           <label>Your name <input id="join-name" maxlength="30" placeholder="Player two" autocomplete="name"></label>
-          <label>Email <input id="join-email" type="email" placeholder="you@example.com" autocomplete="email"><small>Required for day-length games.</small></label>
           <button id="join-button" class="primary">Join game</button>
         </div>
         <div id="waiting-panel" class="card-panel waiting-panel hidden"><div class="pulse"></div><div><h2>Room is ready</h2><p>Share the invite link with your opponent. The game begins when they join.</p></div></div>
@@ -85,6 +84,7 @@
         </div>
         <div id="game-panel" class="game-panel hidden">
           <div class="scorebar"><div id="players"></div><div class="turn-box"><span id="turn-label"></span><strong id="countdown"></strong></div></div>
+          <div id="pause-controls" class="side-section hidden"><p id="pause-status" role="status"></p><button id="pause-button" class="secondary">Request pause</button> <button id="cancel-pause" class="secondary hidden">Cancel request</button></div>
           <div id="last-move" class="last-move hidden"></div>
           <div class="play-layout">
             <div class="board-wrap"><div class="board-head"><span>GAME BOARD</span><span id="deck-count"></span></div><div id="board" class="board" aria-label="Game board"></div></div>

@@ -92,7 +92,7 @@ export async function listAccountRooms(email) {
 }
 export const durableStorage = Boolean(url && secret);
 // Returns false if the room id is already taken.
-export async function createRoom(game) {
+async function createRoomUnlocked(game) {
   if (durableStorage) {
     try { await remote('POST', '', { id: game.id, state: game }); }
     catch (error) { if (/\(409\)/.test(error.message)) return false; throw error; }
@@ -111,7 +111,7 @@ export async function getRoom(id) {
   }
   return (await localRead())[id] ?? null;
 }
-export async function updateRoom(id, expectedVersion, state) {
+async function updateRoomUnlocked(id, expectedVersion, state) {
   if (durableStorage) {
     const rows = await remote('PATCH', `?id=eq.${encodeURIComponent(id)}&version=eq.${expectedVersion}&select=id`, {
       state, version: expectedVersion + 1, updated_at: new Date().toISOString()
@@ -124,3 +124,26 @@ export async function updateRoom(id, expectedVersion, state) {
   await localWrite(rooms);
   return true;
 }
+async function deleteRoomUnlocked(id, expectedVersion) {
+  if (durableStorage) {
+    const rows = await remote('DELETE', `?id=eq.${encodeURIComponent(id)}&version=eq.${expectedVersion}&select=id`);
+    return rows.length === 1;
+  }
+  const rooms = await localRead();
+  if (rooms[id]?.version !== expectedVersion) return false;
+  delete rooms[id];
+  await localWrite(rooms);
+  return true;
+}
+
+// Keep local read/check/write operations atomic against joins, moves and deletion.
+let roomWrites = Promise.resolve();
+function roomWrite(operation) {
+  if (durableStorage) return operation();
+  const result = roomWrites.then(operation);
+  roomWrites = result.catch(() => {});
+  return result;
+}
+export function createRoom(game) { return roomWrite(() => createRoomUnlocked(game)); }
+export function updateRoom(id, version, state) { return roomWrite(() => updateRoomUnlocked(id, version, state)); }
+export function deleteRoom(id, version) { return roomWrite(() => deleteRoomUnlocked(id, version)); }
