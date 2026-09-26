@@ -11,14 +11,18 @@ function roomLink(game, playerToken) {
 function timerText(seconds) {
   return seconds < 86400 ? `${seconds / 60} minute${seconds === 60 ? '' : 's'}` : `${seconds / 86400} day${seconds === 86400 ? '' : 's'}`;
 }
-async function sendEmail(to, subject, text) {
+async function sendEmail(to, subject, text, replyTo) {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [to], subject, text }),
+    body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [to], subject, text, ...(replyTo ? { reply_to: replyTo } : {}) }),
     signal: AbortSignal.timeout(10000)
   });
   if (!response.ok) throw new Error(`Email delivery failed (${response.status}): ${await response.text()}`);
+}
+export async function sendFeedback({ name, email, feedback }) {
+  await sendEmail('nate@nathanielmann.ca', `Website feedback from ${name}`,
+    `Name: ${name}\nEmail: ${email}\n\nFeedback:\n${feedback}`, email);
 }
 export async function notifyNextPlayer(game) {
   if (!isDayGame(game) || game.status !== 'playing') return;

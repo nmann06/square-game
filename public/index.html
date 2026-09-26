@@ -12,8 +12,7 @@
 <body>
   <div class="shell">
     <header class="topbar">
-      <a href="/square-game" class="brand"><span class="brand-mark">□</span> Square Game</a>
-      <span class="top-note">A little grid. A lot of possibilities.</span>
+      <div class="brand-row"><a href="https://nathanielmann.ca/" class="site-home" aria-label="Nathaniel Mann, home"><span class="site-mark">NM<span>.</span></span></a><span class="game-title">Square Game</span></div>
     </header>
 
     <main>
@@ -70,7 +69,7 @@
             <div class="board-wrap"><div class="board-head"><span>GAME BOARD</span><span id="deck-count"></span></div><div id="board" class="board" aria-label="Game board"></div></div>
             <aside class="side-panel">
               <div class="side-section"><h2>Your hand</h2><p id="hand-help" class="fine">Select a card, then choose an empty square.</p><div id="hand" class="hand"></div></div>
-              <div class="side-section"><h3>Move</h3><p id="move-help" class="fine">Play 1–4 cards in one row or column.</p><div id="staged" class="staged"></div><div class="button-row"><button id="undo-button" class="secondary">Undo</button><button id="play-button" class="primary">Play cards</button></div><button id="pass-button" class="text-button">Pass turn</button><label class="trade-label"><input id="trade-mode" type="checkbox"> Trade selected cards when passing</label><p id="swap-help" class="fine">To pick up a wild: select a regular card in your hand, then click the wild card on the board before placing anything.</p></div>
+              <div class="side-section"><h3>Move</h3><p id="move-help" class="fine">Play 1–4 cards in one row or column.</p><div id="staged" class="staged"></div><div id="move-preview" class="move-preview" role="status" aria-live="polite">Place tiles to preview your score.</div><div class="button-row"><button id="undo-button" class="secondary">Undo</button><button id="play-button" class="primary">Play cards</button></div><button id="pass-button" class="text-button">Pass turn</button><label class="trade-label"><input id="trade-mode" type="checkbox"> Trade selected cards when passing</label><p id="swap-help" class="fine">To pick up a wild: select a regular card in your hand, then click the wild card on the board before placing anything.</p></div>
               <div class="rules-mini"><h3>Quick rules</h3><p>Each line has 2–4 cards. For color, shape, and number, values must be all the same or all different. Score every line you create or extend. Each completed four-card lot doubles the whole turn.</p><a href="https://www.ultraboardgames.com/iota/game-rules.php" target="_blank" rel="noopener">Read the original rules ↗</a></div>
             </aside>
           </div>
@@ -78,7 +77,7 @@
         <p id="room-error" class="error" role="alert"></p>
       </section>
     </main>
-    <footer>Square Game · Inspired by Iota · Custom wild exchange scoring</footer>
+    <footer>Square Game</footer>
   </div>
 </body>
 </html>

@@ -7,7 +7,7 @@ import {
   passTurn, advanceExpired, roomCode, inviteFriend
 } from './game.js';
 import { createRoom, getRoom, updateRoom, durableStorage } from './store.js';
-import { mailReady, notifyNextPlayer, sendInvite, notifyInviteAccepted } from './mail.js';
+import { mailReady, notifyNextPlayer, sendInvite, notifyInviteAccepted, sendFeedback } from './mail.js';
 
 const port = Number(process.env.PORT || 10000);
 const basePath = '/square-game';
@@ -22,6 +22,7 @@ const files = new Map([
   ['/config.js', ['config.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']]
 ]);
+const feedbackAttempts = new Map();
 
 function send(res, status, data) {
   res.writeHead(status, {
@@ -96,6 +97,25 @@ async function handler(req, res) {
     return;
   }
   if (path === '/health') return send(res, 200, { ok: true, durableStorage, emailConfigured: mailReady() });
+  if (path === '/api/feedback' && req.method === 'POST') {
+    if (!allowedOrigins.has(req.headers.origin)) return send(res, 403, { error: 'Feedback must be sent from the website.' });
+    if (!mailReady()) return send(res, 503, { error: 'Feedback email is temporarily unavailable.' });
+    const input = await body(req);
+    if (input.website) return send(res, 200, { ok: true });
+    const name = String(input.name ?? '').trim();
+    const email = String(input.email ?? '').trim();
+    const feedback = String(input.feedback ?? '').trim();
+    if (!name || name.length > 100 || /[\r\n]/.test(name)) return send(res, 400, { error: 'Enter a name under 100 characters.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return send(res, 400, { error: 'Enter a valid email address.' });
+    if (!feedback || feedback.length > 5000) return send(res, 400, { error: 'Enter feedback under 5,000 characters.' });
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0].trim();
+    const recent = (feedbackAttempts.get(ip) ?? []).filter(at => at > Date.now() - 3600000);
+    if (recent.length >= 3) return send(res, 429, { error: 'Too many messages. Please try again later.' });
+    await sendFeedback({ name, email, feedback });
+    feedbackAttempts.set(ip, [...recent, Date.now()]);
+    if (feedbackAttempts.size > 1000) feedbackAttempts.clear();
+    return send(res, 200, { ok: true });
+  }
   if (path === '/api/rooms' && req.method === 'POST') {
     const input = await body(req);
     if (Number(input.timerSeconds) >= 86400 && (!durableStorage || !mailReady())) {
@@ -110,13 +130,24 @@ async function handler(req, res) {
     if (!created) return send(res, 503, { error: 'No room codes available. Please try again.' });
     return send(res, 201, { room: publicGame(game, 0), token: game.players[0].token });
   }
-  const match = path.match(/^\/api\/rooms\/([\w-]+)(?:\/(join|action|invite))?$/);
+  const match = path.match(/^\/api\/rooms\/([\w-]+)(?:\/(join|action|invite|preview))?$/);
   if (!match) return send(res, 404, { error: 'Not found.' });
   const [, id, operation] = match;
   const row = await loadFresh(id);
   if (!row) return send(res, 404, { error: 'Room not found.' });
   const game = row.state;
   if (req.method === 'GET' && !operation) return send(res, 200, { room: publicGame(game, auth(req, game)) });
+  if (req.method === 'POST' && operation === 'preview') {
+    const index = auth(req, game);
+    if (index < 0) return send(res, 401, { error: 'Open your personal game link to preview a move.' });
+    const input = await body(req);
+    try {
+      const next = playCards(game, index, input.placements);
+      return send(res, 200, { legal: true, points: next.lastMove.points });
+    } catch (error) {
+      return send(res, 200, { legal: false, reason: error.message });
+    }
+  }
   if (req.method === 'POST' && operation === 'join') {
     const next = joinGame(game, await body(req));
     if (!(await updateRoom(id, row.version, next))) return send(res, 409, { error: 'Room changed. Please retry.' });

@@ -6,6 +6,8 @@ let roomId = location.pathname.match(/^\/square-game\/room\/([\w-]+)$/)?.[1] ?? 
 let playerToken = null;
 let selected = null;
 let staged = [];
+let previewStatus = { status: 'empty', message: 'Place tiles to preview your score.' };
+let previewRevision = 0;
 let tradeIds = new Set();
 let timerSeconds = 300;
 let busy = false;
@@ -108,7 +110,11 @@ function renderBoard() {
     cell.type = 'button';
     cell.setAttribute('aria-label', existing ? `Board card ${existing.wild ? 'wild' : `${existing.color} ${existing.shape} ${existing.number}`} at ${x}, ${y}` : `Empty position ${x}, ${y}`);
     if (existing) cell.append(cardElement(existing, false, false, recent.has(key)));
-    else if (preview) cell.append(cardElement(preview.card, false, true));
+    else if (preview) {
+      const tile = cardElement(preview.card, false, true);
+      if (previewStatus.status === 'legal' || previewStatus.status === 'illegal') tile.classList.add(previewStatus.status);
+      cell.append(tile);
+    }
     cell.addEventListener('click', () => boardClick(x, y, existing));
     fragment.append(cell);
   }
@@ -134,11 +140,44 @@ function renderHand() {
 }
 function renderStaged() {
   $('staged').textContent = staged.length ? `${staged.length} card${staged.length === 1 ? '' : 's'} staged: ${staged.map(p => `(${p.x}, ${p.y})`).join(', ')}` : room.pendingSwap ? `Wild exchanged · base ${room.pendingSwap.base}, ${room.pendingSwap.lots} lot(s). Now play your turn.` : 'No cards staged.';
+  updatePreview();
+}
+function showPreview() {
+  const node = $('move-preview');
+  node.className = `move-preview ${previewStatus.status}`;
+  node.textContent = previewStatus.message;
   renderControls();
+}
+async function updatePreview() {
+  const revision = ++previewRevision;
+  if (!staged.length) {
+    previewStatus = { status: 'empty', message: 'Place tiles to preview your score.' };
+    showPreview();
+    renderBoard();
+    return;
+  }
+  previewStatus = { status: 'checking', message: 'Checking move…' };
+  showPreview();
+  renderBoard();
+  try {
+    const result = await api(`/api/rooms/${roomId}/preview`, {
+      method: 'POST', body: JSON.stringify({ placements: staged.map(({ card, ...place }) => place) })
+    });
+    if (revision !== previewRevision) return;
+    if (result.legal) {
+      const currentScore = room.players.find(player => player.isYou)?.score ?? 0;
+      previewStatus = { status: 'legal', message: `This move: +${result.points} pts · Total if played: ${currentScore + result.points} pts` };
+    } else previewStatus = { status: 'illegal', message: `Illegal move: ${result.reason}` };
+  } catch (error) {
+    if (revision !== previewRevision) return;
+    previewStatus = { status: 'unavailable', message: `Could not check move: ${error.message}` };
+  }
+  showPreview();
+  renderBoard();
 }
 function renderControls() {
   const canAct = room?.status === 'playing' && currentIsYou() && !busy;
-  $('play-button').disabled = !canAct || staged.length === 0;
+  $('play-button').disabled = !canAct || previewStatus.status !== 'legal';
   $('pass-button').disabled = !canAct;
   $('undo-button').disabled = !canAct || staged.length === 0;
   $('pass-button').textContent = $('trade-mode').checked && tradeIds.size ? `Trade ${tradeIds.size} and pass` : 'Pass turn';
