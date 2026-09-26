@@ -104,7 +104,7 @@ async function handler(req, res) {
   }
   const path = pathname === basePath ? '/' : pathname.startsWith(basePath + '/') ? pathname.slice(basePath.length) : null;
   if (path === null) return send(res, 404, { error: 'Not found.' });
-  if (req.method === 'GET' && (files.has(path) || /^\/room\/[\w-]+$/.test(path))) {
+  if (req.method === 'GET' && (files.has(path) || path === '/account' || /^\/room\/[\w-]+$/.test(path))) {
     const [file, type] = files.get(path) || files.get('/');
     const content = await readFile(join(root, file));
     res.writeHead(200, { 'content-type': type, 'cache-control': file === 'index.html' ? 'no-cache' : 'public, max-age=3600', 'x-content-type-options': 'nosniff' });

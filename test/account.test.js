@@ -19,6 +19,7 @@ test('account summary counts finished games and lists active rooms', () => {
   assert.equal(summary.wins, 1);
   assert.equal(summary.winPercent, 50);
   assert.equal(summary.currentGames.length, 2);
+  assert.deepEqual(summary.finishedGames.map(game => game.outcome), ['win', 'loss']);
 });
 
 test('email code signs in once and account can reopen its room', async () => {

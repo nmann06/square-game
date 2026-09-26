@@ -1,6 +1,13 @@
 const $ = id => document.getElementById(id);
 const basePath = '/square-game';
 const apiOrigin = window.SQUARE_GAME_API_ORIGIN || location.origin;
+const accountRoute = location.pathname.replace(/\/$/, '') === `${basePath}/account`;
+if (accountRoute) {
+  document.body.classList.add('account-route');
+  document.getElementById('account-page-profile').append(document.getElementById('account-panel'));
+  document.getElementById('landing').classList.add('hidden');
+  document.getElementById('account-page').classList.remove('hidden');
+}
 let room = null;
 let roomId = location.pathname.match(/^\/square-game\/room\/([\w-]+)$/)?.[1] ?? null;
 let playerToken = null;
@@ -63,7 +70,8 @@ function formatTimer(seconds) {
 function currentIsYou() { return room?.players[room.current]?.isYou; }
 function render() {
   show('account-panel', !roomId);
-  show('landing', !roomId);
+  show('landing', !roomId && !accountRoute);
+  show('account-page', !roomId && accountRoute);
   show('room', Boolean(roomId));
   if (!room) return;
   $('room-code').textContent = room.id;
@@ -92,12 +100,14 @@ function useAccount(email) {
 async function refreshAccount() {
   if (!accountToken) {
     show('account-sign-in', true); show('account-profile', false);
+    show('account-history', false);
     return;
   }
   try {
     const data = await api('/api/account/me');
     useAccount(data.email);
     show('account-sign-in', false); show('account-profile', true);
+    show('account-history', true);
     $('account-identity').textContent = data.email;
     $('account-win-percent').textContent = `${data.winPercent}%`;
     $('account-games-played').textContent = String(data.gamesPlayed);
@@ -110,10 +120,22 @@ async function refreshAccount() {
         element('small', '', game.status === 'waiting' ? 'Waiting for a friend' : game.yourTurn ? 'Your turn' : "Opponent's turn"));
       list.append(link);
     }
+    const finished = $('account-finished-games'); finished.replaceChildren();
+    if (!data.finishedGames?.length) finished.append(element('p', 'fine', 'No completed games yet.'));
+    for (const game of data.finishedGames || []) {
+      const link = element('a'); link.href = `${basePath}/room/${game.id}`;
+      const result = game.outcome === 'win' ? 'Won' : game.outcome === 'loss' ? 'Lost' : 'Tied';
+      const reason = game.finishReason === 'missed-turns' ? ' · missed turns' : '';
+      const date = game.finishedAt ? new Date(game.finishedAt).toLocaleDateString() : '';
+      link.append(element('span', '', `Room ${game.id} · ${game.opponent}`),
+        element('small', '', `${result} ${game.yourScore}–${game.opponentScore}${reason}${date ? ` · ${date}` : ''}`));
+      finished.append(link);
+    }
   } catch (error) {
     if (error.status === 401) {
       localStorage.removeItem('square-account-token'); accountToken = null; signedInEmail = null;
       show('account-sign-in', true); show('account-profile', false);
+      show('account-history', false);
       $('account-error').textContent = 'Your sign-in expired. Request a new code.';
     } else $('account-error').textContent = error.message;
   }
@@ -264,7 +286,7 @@ async function act(input) {
 }
 function updateCountdown() {
   if (!room || room.status === 'waiting') return;
-  if (room.status === 'finished') { $('countdown').textContent = room.winner ? `${room.players.find(p => p.id === room.winner)?.name} wins` : 'Tie game'; return; }
+  if (room.status === 'finished') { $('countdown').textContent = room.finishReason === 'missed-turns' ? 'Tie · missed turns' : room.winner ? `${room.players.find(p => p.id === room.winner)?.name} wins` : 'Tie game'; return; }
   const left = Math.max(0, Math.ceil((room.deadline - Date.now()) / 1000));
   const days = Math.floor(left / 86400), hours = Math.floor((left % 86400) / 3600), minutes = Math.floor((left % 3600) / 60), seconds = left % 60;
   $('countdown').textContent = days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : `${minutes}:${String(seconds).padStart(2, '0')}`;
@@ -369,6 +391,7 @@ $('account-sign-out').addEventListener('click', () => {
     if ($(id).value === email) $(id).value = '';
   }
   show('account-sign-in', true); show('account-profile', false);
+  show('account-history', false);
   setError('account-error');
 });
 

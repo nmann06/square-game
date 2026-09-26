@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, joinGame, newDeck, playCards, swapWild, passTurn, validateBoard, timerValid, inviteFriend, publicGame } from '../game.js';
+import { createGame, joinGame, newDeck, playCards, swapWild, passTurn, advanceExpired, validateBoard, timerValid, inviteFriend, publicGame } from '../game.js';
 
 const c = (id, color, shape, number) => ({ id, color, shape, number });
 
@@ -22,6 +22,38 @@ test('timer options and two-player room setup', () => {
   assert.equal(game.players[0].hand.length, 4);
   assert.equal(game.players[1].hand.length, 4);
   assert.equal(game.deadline, 62000);
+});
+
+test('two consecutive missed turns by one player end the game in a tie', () => {
+  const game = joinGame(createGame({ name: 'A', timerSeconds: 60, now: 1000 }), { name: 'B', now: 2000 });
+  const first = game.current;
+  game.players[0].score = 30;
+  game.players[1].score = 5;
+  const afterOneMiss = advanceExpired(game, 62000);
+  assert.equal(afterOneMiss.status, 'playing');
+  // The other player keeps playing; the first player misses again.
+  const played = passTurn(afterOneMiss, 1 - first, [], 62001);
+  const finished = advanceExpired(played, 122001);
+  assert.equal(finished.status, 'finished');
+  assert.equal(finished.missedTurns[first], 2);
+  assert.equal(finished.missedTurns[1 - first], 0);
+  assert.equal(finished.winner, null);
+  assert.equal(finished.finishReason, 'missed-turns');
+  assert.equal(finished.finishedAt, 122001);
+  assert.equal(finished.deadline, null);
+});
+
+test('taking a turn resets that player’s consecutive missed turns', () => {
+  const game = joinGame(createGame({ name: 'A', timerSeconds: 60, now: 1000 }), { name: 'B', now: 2000 });
+  const first = game.current;
+  let state = advanceExpired(game, 62000);
+  state = passTurn(state, 1 - first, [], 62001);
+  state = passTurn(state, first, [], 62002);
+  assert.equal(state.missedTurns[first], 0);
+  state = advanceExpired(state, 122002);
+  state = advanceExpired(state, 182002);
+  assert.equal(state.status, 'playing');
+  assert.deepEqual(state.missedTurns, [1, 1]);
 });
 
 test('only the host can invite, and needs an email to hear back', () => {

@@ -46,7 +46,7 @@ export function createGame({ name, email, accountEmail, timerSeconds, now = Date
     id: roomCode(), status: 'waiting', timerSeconds, createdAt: now,
     players: [{ id: token(9), token: token(), name: cleanName(name), email: cleanEmail(email), ...(accountEmail ? { accountEmail } : {}), hand: [], score: 0 }],
     board: { '0,0': starter }, deck, current: 0, deadline: null,
-    consecutivePasses: 0, pendingSwap: null, lastMove: null, winner: null
+    consecutivePasses: 0, missedTurns: [0, 0], pendingSwap: null, lastMove: null, winner: null
   };
   draw(game, game.players[0]);
   return game;
@@ -181,7 +181,7 @@ function scoreLines(lines, changed) {
 function finalize(game, index, { base, lots, count, kind, cells = [] }, now) {
   const player = game.players[index];
   const hadSwap = Boolean(game.pendingSwap);
-  const pending = game.pendingSwap ?? { base: 0, lots: 0 };
+  const pending = kind === 'timeout' ? { base: 0, lots: 0 } : game.pendingSwap ?? { base: 0, lots: 0 };
   const combinedBase = pending.base + base;
   const combinedLots = pending.lots + lots;
   const allFour = count === 4;
@@ -189,12 +189,22 @@ function finalize(game, index, { base, lots, count, kind, cells = [] }, now) {
   const points = combinedBase * (2 ** combinedLots) * (allFour ? 2 : 1) * (emptied ? 2 : 1);
   player.score += points;
   game.pendingSwap = null;
+  game.missedTurns ??= [0, 0];
+  game.missedTurns[index] = kind === 'timeout' ? game.missedTurns[index] + 1 : 0;
   game.consecutivePasses = kind === 'pass' && !hadSwap ? game.consecutivePasses + 1 : 0;
   game.lastMove = { playerId: player.id, playerName: player.name, kind, points, base: combinedBase, lots: combinedLots, at: now, cells: pending.spot ? [pending.spot, ...cells] : cells };
-  if (emptied || (game.deck.length === 0 && game.consecutivePasses >= 2)) {
+  if (game.missedTurns.some(count => count >= 2)) {
+    game.status = 'finished';
+    game.deadline = null;
+    game.winner = null;
+    game.finishReason = 'missed-turns';
+    game.finishedAt = now;
+  } else if (emptied || (game.deck.length === 0 && game.consecutivePasses >= 2)) {
     game.status = 'finished';
     game.deadline = null;
     game.winner = game.players[0].score === game.players[1].score ? null : game.players.reduce((a, b) => a.score > b.score ? a : b).id;
+    game.finishReason = emptied ? 'cards' : 'passes';
+    game.finishedAt = now;
   } else {
     game.current = 1 - index;
     game.deadline = now + game.timerSeconds * 1000;
@@ -271,13 +281,11 @@ export function passTurn(source, index, tradeIds = [], now = Date.now()) {
 export function advanceExpired(source, now = Date.now()) {
   let game = copy(source);
   let count = 0;
-  while (game.status === 'playing' && game.deadline <= now && count < 2) {
+  while (game.status === 'playing' && game.deadline <= now && count < 4) {
     const at = game.deadline;
     game = finalize(game, game.current, { base: 0, lots: 0, count: 0, kind: 'timeout' }, at);
     count++;
   }
-  // For very long idle periods, give the current player a fresh full turn.
-  if (game.status === 'playing' && game.deadline <= now) game.deadline = now + game.timerSeconds * 1000;
   return game;
 }
 export function publicGame(game, index) {
@@ -286,7 +294,7 @@ export function publicGame(game, index) {
     players: game.players.map((p, i) => ({ id: p.id, name: p.name, score: p.score, cardCount: p.hand.length, isYou: i === index })),
     board: game.board, hand: index >= 0 ? game.players[index].hand : [], deckCount: game.deck.length,
     current: game.current, deadline: game.deadline, pendingSwap: index === game.current ? game.pendingSwap : null,
-    lastMove: game.lastMove, winner: game.winner,
+    lastMove: game.lastMove, winner: game.winner, finishReason: game.finishReason ?? null,
     // Only the host sees invite details; the joining player never sees emails.
     ...(index === 0 ? { invites: (game.invites ?? []).map(invite => invite.email), hostHasEmail: Boolean(game.players[0].email) } : {})
   };
@@ -295,6 +303,7 @@ export function accountSummary(games, email, now = Date.now()) {
   let gamesPlayed = 0;
   let wins = 0;
   const currentGames = [];
+  const finishedGames = [];
   for (const original of games) {
     const game = advanceExpired(original, now);
     const index = game.players.findIndex(player => player.accountEmail === email);
@@ -302,6 +311,13 @@ export function accountSummary(games, email, now = Date.now()) {
     if (game.status === 'finished') {
       gamesPlayed++;
       if (game.winner === game.players[index].id) wins++;
+      finishedGames.push({
+        id: game.id, opponent: game.players[1 - index]?.name ?? 'Unknown player',
+        outcome: game.winner === null ? 'tie' : game.winner === game.players[index].id ? 'win' : 'loss',
+        yourScore: game.players[index].score, opponentScore: game.players[1 - index]?.score ?? 0,
+        finishReason: game.finishReason ?? null,
+        finishedAt: game.finishedAt ?? game.lastMove?.at ?? game.createdAt ?? 0
+      });
     } else {
       currentGames.push({
         id: game.id, status: game.status, yourTurn: game.status === 'playing' && game.current === index,
@@ -311,5 +327,6 @@ export function accountSummary(games, email, now = Date.now()) {
     }
   }
   currentGames.sort((a, b) => b.createdAt - a.createdAt);
-  return { gamesPlayed, wins, winPercent: gamesPlayed ? Math.round(100 * wins / gamesPlayed) : 0, currentGames };
+  finishedGames.sort((a, b) => b.finishedAt - a.finishedAt);
+  return { gamesPlayed, wins, winPercent: gamesPlayed ? Math.round(100 * wins / gamesPlayed) : 0, currentGames, finishedGames };
 }
