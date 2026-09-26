@@ -17,3 +17,5 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      - key: ACCOUNT_SECRET
+        sync: false

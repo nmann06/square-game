@@ -4,6 +4,8 @@ const apiOrigin = window.SQUARE_GAME_API_ORIGIN || location.origin;
 let room = null;
 let roomId = location.pathname.match(/^\/square-game\/room\/([\w-]+)$/)?.[1] ?? null;
 let playerToken = null;
+let accountToken = localStorage.getItem('square-account-token');
+let signedInEmail = null;
 let selected = null;
 let staged = [];
 let previewStatus = { status: 'empty', message: 'Place tiles to preview your score.' };
@@ -35,13 +37,13 @@ async function api(path, options = {}) {
   }
   const response = await fetch(new URL(basePath + path, apiOrigin), {
     ...options,
-    headers: { ...(options.body ? { 'content-type': 'application/json' } : {}), ...(playerToken ? { authorization: `Bearer ${playerToken}` } : {}), ...options.headers }
+    headers: { ...(options.body ? { 'content-type': 'application/json' } : {}), ...(playerToken ? { authorization: `Bearer ${playerToken}` } : {}), ...(accountToken ? { 'x-account-token': accountToken } : {}), ...options.headers }
   });
   const raw = await response.text();
   let data;
   try { data = JSON.parse(raw); }
   catch { throw new Error(`Game server returned ${raw ? 'a non-JSON response' : 'an empty response'} (HTTP ${response.status}). Check GAME_API_ORIGIN and the game service logs.`); }
-  if (!response.ok) throw new Error(data.error || 'Request failed.');
+  if (!response.ok) { const error = new Error(data.error || 'Request failed.'); error.status = response.status; throw error; }
   return data;
 }
 function setRoom(data, newToken) {
@@ -60,6 +62,7 @@ function formatTimer(seconds) {
 }
 function currentIsYou() { return room?.players[room.current]?.isYou; }
 function render() {
+  show('account-panel', !roomId);
   show('landing', !roomId);
   show('room', Boolean(roomId));
   if (!room) return;
@@ -76,6 +79,56 @@ function render() {
   show('game-panel', room.status !== 'waiting');
   if (room.status === 'waiting') return;
   renderScores(); renderBoard(); renderHand(); renderStaged(); renderLastMove(); updateCountdown();
+}
+function useAccount(email) {
+  signedInEmail = email;
+  for (const id of ['create-email', 'join-email', 'host-email']) {
+    $(id).value = email;
+    $(id).readOnly = true;
+  }
+  const savedName = localStorage.getItem('square-player-name');
+  if (savedName) for (const id of ['create-name', 'join-name']) if (!$(id).value) $(id).value = savedName;
+}
+async function refreshAccount() {
+  if (!accountToken) {
+    show('account-sign-in', true); show('account-profile', false);
+    return;
+  }
+  try {
+    const data = await api('/api/account/me');
+    useAccount(data.email);
+    show('account-sign-in', false); show('account-profile', true);
+    $('account-identity').textContent = data.email;
+    $('account-win-percent').textContent = `${data.winPercent}%`;
+    $('account-games-played').textContent = String(data.gamesPlayed);
+    $('account-current-count').textContent = String(data.currentGames.length);
+    const list = $('account-current-games'); list.replaceChildren();
+    if (!data.currentGames.length) list.append(element('p', 'fine', 'No games in progress yet.'));
+    for (const game of data.currentGames) {
+      const link = element('a'); link.href = `${basePath}/room/${game.id}`;
+      link.append(element('span', '', `Room ${game.id} · ${game.opponent}`),
+        element('small', '', game.status === 'waiting' ? 'Waiting for a friend' : game.yourTurn ? 'Your turn' : "Opponent's turn"));
+      list.append(link);
+    }
+  } catch (error) {
+    if (error.status === 401) {
+      localStorage.removeItem('square-account-token'); accountToken = null; signedInEmail = null;
+      show('account-sign-in', true); show('account-profile', false);
+      $('account-error').textContent = 'Your sign-in expired. Request a new code.';
+    } else $('account-error').textContent = error.message;
+  }
+}
+async function linkSavedRooms() {
+  if (!accountToken) return;
+  const saved = [];
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (/^square-token-\d{4}$/.test(key)) saved.push([key.slice('square-token-'.length), localStorage.getItem(key)]);
+  }
+  for (const [id, token] of saved) {
+    try { await api(`/api/rooms/${id}/link-account`, { method: 'POST', headers: { authorization: `Bearer ${token}` } }); }
+    catch { /* Stale or differently owned room links stay untouched. */ }
+  }
 }
 function renderScores() {
   const parent = $('players'); parent.replaceChildren();
@@ -236,6 +289,7 @@ $('create-button').addEventListener('click', async () => {
   setError('setup-error');
   try {
     const data = await api('/api/rooms', { method: 'POST', body: JSON.stringify({ name: $('create-name').value, email: $('create-email').value, timerSeconds }) });
+    localStorage.setItem('square-player-name', $('create-name').value.trim());
     setRoom(data, data.token);
   } catch (error) { setError('setup-error', error.message); }
 });
@@ -243,6 +297,7 @@ $('join-button').addEventListener('click', async () => {
   setError('room-error');
   try {
     const data = await api(`/api/rooms/${roomId}/join`, { method: 'POST', body: JSON.stringify({ name: $('join-name').value, email: $('join-email').value }) });
+    localStorage.setItem('square-player-name', $('join-name').value.trim());
     setRoom(data, data.token);
   } catch (error) { setError('room-error', error.message); }
 });
@@ -275,11 +330,55 @@ $('undo-button').addEventListener('click', () => { staged.pop(); renderBoard(); 
 $('pass-button').addEventListener('click', () => act({ type: 'pass', tradeIds: $('trade-mode').checked ? [...tradeIds] : [] }));
 $('trade-mode').addEventListener('change', () => { selected = null; tradeIds.clear(); renderHand(); });
 
+$('code-request-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button');
+  button.disabled = true;
+  setError('account-error'); $('account-message').textContent = 'Sending code…';
+  try {
+    await api('/api/account/request-code', { method: 'POST', body: JSON.stringify({ email: $('account-email').value }) });
+    show('code-verify-form', true);
+    $('account-code').focus();
+    $('account-message').textContent = 'Check your email for a six-digit code. It expires in 10 minutes.';
+  } catch (error) { $('account-message').textContent = ''; setError('account-error', error.message); }
+  finally { button.disabled = false; }
+});
+$('code-verify-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button');
+  button.disabled = true;
+  setError('account-error');
+  try {
+    const result = await api('/api/account/verify-code', { method: 'POST', body: JSON.stringify({ email: $('account-email').value, code: $('account-code').value }) });
+    accountToken = result.token;
+    localStorage.setItem('square-account-token', accountToken);
+    $('account-code').value = '';
+    show('code-verify-form', false);
+    $('account-message').textContent = '';
+    await linkSavedRooms();
+    await refreshAccount();
+    if (roomId) await refresh();
+  } catch (error) { setError('account-error', error.message); }
+  finally { button.disabled = false; }
+});
+$('account-sign-out').addEventListener('click', () => {
+  const email = signedInEmail;
+  localStorage.removeItem('square-account-token'); accountToken = null; signedInEmail = null;
+  for (const id of ['create-email', 'join-email', 'host-email']) {
+    $(id).readOnly = false;
+    if ($(id).value === email) $(id).value = '';
+  }
+  show('account-sign-in', true); show('account-profile', false);
+  setError('account-error');
+});
+
 if (roomId) {
   const queryToken = new URLSearchParams(location.search).get('token');
   playerToken = queryToken || localStorage.getItem(`square-token-${roomId}`);
   if (queryToken) { localStorage.setItem(`square-token-${roomId}`, queryToken); history.replaceState(null, '', `${basePath}/room/${roomId}`); }
   refresh();
 }
+if (accountToken && roomId && playerToken) linkSavedRooms().then(refreshAccount);
+else refreshAccount();
 setInterval(updateCountdown, 1000);
 setInterval(refresh, 10000);

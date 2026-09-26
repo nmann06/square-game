@@ -35,7 +35,7 @@ export function timerValid(seconds) {
   return Number.isInteger(seconds) && ((seconds >= 60 && seconds <= 600 && seconds % 60 === 0) || TIMER_OPTIONS.includes(seconds));
 }
 export function isDayGame(game) { return game.timerSeconds >= 86400; }
-export function createGame({ name, email, timerSeconds, now = Date.now() }) {
+export function createGame({ name, email, accountEmail, timerSeconds, now = Date.now() }) {
   if (!timerValid(timerSeconds)) fail('Choose a timer from 1–10 minutes or 1, 2, 3, or 7 days.');
   if (timerSeconds >= 86400 && !email) fail('Email is required for day-length games.');
   const deck = newDeck();
@@ -44,7 +44,7 @@ export function createGame({ name, email, timerSeconds, now = Date.now() }) {
   if (starter.wild) starter.as = { color: COLORS[randomInt(4)], shape: SHAPES[randomInt(4)], number: randomInt(1, 5) };
   const game = {
     id: roomCode(), status: 'waiting', timerSeconds, createdAt: now,
-    players: [{ id: token(9), token: token(), name: cleanName(name), email: cleanEmail(email), hand: [], score: 0 }],
+    players: [{ id: token(9), token: token(), name: cleanName(name), email: cleanEmail(email), ...(accountEmail ? { accountEmail } : {}), hand: [], score: 0 }],
     board: { '0,0': starter }, deck, current: 0, deadline: null,
     consecutivePasses: 0, pendingSwap: null, lastMove: null, winner: null
   };
@@ -61,11 +61,12 @@ function cleanEmail(email) {
   if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) fail('Enter a valid email address.');
   return value;
 }
-export function joinGame(source, { name, email, now = Date.now() }) {
+export function joinGame(source, { name, email, accountEmail, now = Date.now() }) {
   const game = copy(source);
   if (game.status !== 'waiting') fail('This room is already full.');
   if (isDayGame(game) && !email) fail('Email is required for day-length games.');
-  const player = { id: token(9), token: token(), name: cleanName(name), email: cleanEmail(email), hand: [], score: 0 };
+  if (accountEmail && game.players[0].accountEmail === accountEmail) fail('You cannot join your own room.');
+  const player = { id: token(9), token: token(), name: cleanName(name), email: cleanEmail(email), ...(accountEmail ? { accountEmail } : {}), hand: [], score: 0 };
   game.players.push(player);
   draw(game, player);
   game.status = 'playing';
@@ -289,4 +290,26 @@ export function publicGame(game, index) {
     // Only the host sees invite details; the joining player never sees emails.
     ...(index === 0 ? { invites: (game.invites ?? []).map(invite => invite.email), hostHasEmail: Boolean(game.players[0].email) } : {})
   };
+}
+export function accountSummary(games, email, now = Date.now()) {
+  let gamesPlayed = 0;
+  let wins = 0;
+  const currentGames = [];
+  for (const original of games) {
+    const game = advanceExpired(original, now);
+    const index = game.players.findIndex(player => player.accountEmail === email);
+    if (index < 0) continue;
+    if (game.status === 'finished') {
+      gamesPlayed++;
+      if (game.winner === game.players[index].id) wins++;
+    } else {
+      currentGames.push({
+        id: game.id, status: game.status, yourTurn: game.status === 'playing' && game.current === index,
+        opponent: game.players[1 - index]?.name ?? 'Waiting for a friend',
+        createdAt: game.createdAt ?? 0
+      });
+    }
+  }
+  currentGames.sort((a, b) => b.createdAt - a.createdAt);
+  return { gamesPlayed, wins, winPercent: gamesPlayed ? Math.round(100 * wins / gamesPlayed) : 0, currentGames };
 }

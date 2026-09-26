@@ -11,3 +11,25 @@
 .move-preview.illegal{color:#ffb0a1}
 .tile.preview.legal{opacity:1;border-color:#dcf36b;box-shadow:0 0 0 3px #dcf36b80}
 .tile.preview.illegal{opacity:1;border-color:#e95252;background:#fff0ed;box-shadow:0 0 0 3px #e9525280}
+.account-panel{margin:24px 0 0;padding:24px 28px}
+.account-panel h2{margin:0 0 8px;font-size:23px}
+.account-panel h3{margin:20px 0 12px;font-size:16px}
+.account-panel p{margin:0 0 12px;color:#607362;font-size:13px;line-height:1.5}
+.account-form{display:flex;align-items:end;gap:12px;flex-wrap:wrap;max-width:700px}
+.account-form label{flex:1 1 240px;margin:0}
+.account-form button{flex:none}
+.account-panel .fine{min-height:18px;margin:10px 0 0}
+.account-panel .error{min-height:18px;margin:5px 0 0;color:#a62b19}
+.account-panel #account-message:empty,.account-panel #account-error:empty{display:none}
+.account-heading{display:flex;justify-content:space-between;gap:16px;align-items:start}
+.account-heading .eyebrow{color:#426a36;margin:0 0 7px}
+.account-sign-out{border:0;background:none;color:#426a36;text-decoration:underline;font-weight:700;font-size:12px;padding:7px}
+.account-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px}
+.account-stats>div{background:#fff;border:1px solid #d9dfd3;border-radius:10px;padding:16px}
+.account-stats span{display:block;font-size:11px;font-weight:800;letter-spacing:.1em;color:#607362}
+.account-stats strong{display:block;font-size:30px;color:#21432d;margin-top:6px}
+.account-games{display:grid;gap:8px}
+.account-games a{display:flex;justify-content:space-between;gap:15px;background:#fff;border:1px solid #d9dfd3;border-radius:8px;padding:13px 15px;text-decoration:none;color:#21432d;font-size:13px;font-weight:700}
+.account-games a:hover{border-color:#426a36;background:#f8fbeF}
+.account-games small{color:#607362;font-size:12px;font-weight:500}
+@media(max-width:530px){.account-panel{padding:20px}.account-stats{gap:7px}.account-stats>div{padding:10px}.account-stats span{font-size:9px}.account-stats strong{font-size:23px}.account-games a{flex-direction:column;gap:3px}}

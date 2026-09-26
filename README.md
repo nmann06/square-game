@@ -10,7 +10,7 @@ Wild cards have a face value of zero. The server gives each wild one consistent 
 
 ## Server-side validation
 
-The browser submits only a proposed move, pass, or wild exchange. The server holds the deck, hands, board, turn deadline, and scores. Every action requires that player's private token. The server checks turn ownership, card ownership, placement coordinates, row/column and connection rules, wild consistency, trade limits, and all affected lines before it changes room state. It calculates scores itself and rejects fabricated cards or client-supplied score changes. Supabase writes include an expected room version, so two competing requests cannot both commit against the same state. The browser only receives its own hand; no player email or token is included in public room state.
+The browser submits only a proposed move, pass, or wild exchange. The server holds the deck, hands, board, turn deadline, and scores. Every action requires that player's private token or a verified account session. The server checks turn ownership, card ownership, placement coordinates, row/column and connection rules, wild consistency, trade limits, and all affected lines before it changes room state. It calculates scores itself and rejects fabricated cards or client-supplied score changes. Supabase writes include an expected room version, so two competing requests cannot both commit against the same state. The browser only receives its own hand; no player email or token is included in public room state.
 
 ## Run locally
 
@@ -39,13 +39,16 @@ npm test
    | `SUPABASE_SECRET_KEY` | Your server-only secret key |
    | `RESEND_API_KEY` | Your Resend API key |
    | `EMAIL_FROM` | A verified sender, such as `Square Game <games@example.com>` |
+   | `ACCOUNT_SECRET` | A random, private secret of at least 32 bytes for signing account sessions |
    | `BASE_URL` | `https://nathanielmann.ca/square-game` (configured in `render.yaml`) |
 
-5. Open `/square-game/health` on the game service to check that `durableStorage` and `emailConfigured` are both `true`. Then test a 1-day room with two email addresses through the public domain.
+5. If the game was already deployed, rerun the updated [`schema.sql`](schema.sql) in the Supabase SQL editor to add the login challenge table and verification function. Open `/square-game/health` on the game service to check that `durableStorage`, `emailConfigured`, and `accountConfigured` are all `true`. Then test sign-in and a 1-day room with two email addresses through the public domain.
 
 The existing `nathanielmann.ca` homepage remains a Render static site. It hosts a copy of the game's browser files under `/square-game` and calls this service's API from the browser. Set the homepage's `GAME_API_ORIGIN` environment variable to this service's `onrender.com` origin and redeploy the homepage. This service does not claim the root domain.
 
 The host chooses a 1–10 minute timer or a 1, 2, 3, or 7 day timer. Day rooms require persistent storage and email configuration. After a completed move, the next player receives an email with a personal rejoin link. Treat that link as a password: anyone holding it can play as that player. The general invite link has no player token and is safe to share with the intended opponent.
+
+Accounts use a six-digit email code that expires after ten minutes and can be used once. The browser keeps a 30-day signed account token in local storage. Verified accounts are attached to rooms created or joined while signed in; a typed email alone never attaches a room. Existing rooms in the same browser are linked when their personal room tokens are available. The landing page counts completed games for win rate and games played, and lists waiting or active rooms as current games. Signing out removes the token from that browser. Guest play and personal room links continue to work.
 
 While a room is waiting, the host can email up to three invites from the room page. The invite contains the general room link and code. When anyone joins a room that had an emailed invite, the host gets an email saying the invite was accepted, with their personal rejoin link. Hosts who created the room without an email are asked for one when sending the first invite. Invites work with any timer but need the Resend variables above.
 
@@ -54,7 +57,7 @@ The countdown is enforced when a room is next opened or used. On a free Render s
 ## Current limits
 
 - Two players per room.
-- No account system or password recovery. Save your personal link or keep the same browser's local storage.
+- Email account sign-in requires Resend, Supabase, `ACCOUNT_SECRET`, and the updated schema in production.
 - No bot or matchmaking.
 - An email delivery failure does not undo a saved move; the UI reports the failure so the player can share the invite manually.
 - Storage and email provider accounts must be configured by the site owner before day-length games can be created.

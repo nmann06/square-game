@@ -24,6 +24,10 @@ export async function sendFeedback({ name, email, feedback }) {
   await sendEmail('nate@nathanielmann.ca', `Website feedback from ${name}`,
     `Name: ${name}\nEmail: ${email}\n\nFeedback:\n${feedback}`, email);
 }
+export async function sendSignInCode(email, code) {
+  await sendEmail(email, 'Your Square Game sign-in code',
+    `Your Square Game sign-in code is ${code}.\n\nIt expires in 10 minutes. If you did not request it, you can ignore this email.`);
+}
 export async function notifyNextPlayer(game) {
   if (!isDayGame(game) || game.status !== 'playing') return;
   const player = game.players[game.current];

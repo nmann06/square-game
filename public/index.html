@@ -16,6 +16,21 @@
     </header>
 
     <main>
+      <section id="account-panel" class="account-panel card-panel">
+        <div id="account-sign-in">
+          <h2>Keep track of your games</h2>
+          <p>Sign in with your email to see your record and return to games in progress. No password needed.</p>
+          <form id="code-request-form" class="account-form"><label>Email <input id="account-email" type="email" autocomplete="email" placeholder="you@example.com" required></label><button class="primary" type="submit">Email me a code</button></form>
+          <form id="code-verify-form" class="account-form hidden"><label>Six-digit code <input id="account-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label><button class="primary" type="submit">Verify and sign in</button></form>
+          <p id="account-message" class="fine" role="status" aria-live="polite"></p>
+          <p id="account-error" class="error" role="alert"></p>
+        </div>
+        <div id="account-profile" class="hidden">
+          <div class="account-heading"><div><p class="eyebrow">YOUR SQUARE GAME ACCOUNT</p><h2 id="account-identity"></h2></div><button id="account-sign-out" class="account-sign-out" type="button">Sign out</button></div>
+          <div class="account-stats"><div><span>WIN %</span><strong id="account-win-percent">0%</strong></div><div><span>GAMES PLAYED</span><strong id="account-games-played">0</strong></div><div><span>CURRENT GAMES</span><strong id="account-current-count">0</strong></div></div>
+          <h3>Current games</h3><div id="account-current-games" class="account-games"></div>
+        </div>
+      </section>
       <section id="landing" class="landing">
         <div class="hero">
           <p class="eyebrow">ROOM BASED CARD GAME</p>
