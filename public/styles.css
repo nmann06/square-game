@@ -5,7 +5,8 @@
 .site-home:focus-visible{outline:3px solid #e4c983;outline-offset:5px}
 .site-mark{font-family:Arial,Helvetica,sans-serif;font-weight:900;font-size:26px;letter-spacing:-3px;color:#f5f3ec}
 .site-mark span{color:#c9a54e}
-.game-title{font-weight:800;letter-spacing:-.04em;font-size:23px}
+.game-title{font-weight:800;letter-spacing:-.04em;font-size:23px;text-decoration:none}
+.game-title:focus-visible{outline:3px solid #e4c983;outline-offset:5px}
 .move-preview{min-height:42px;margin:12px 0;color:#b8cab5;font-size:13px;line-height:1.4;font-weight:700}
 .move-preview.legal{color:#dcf36b}
 .move-preview.illegal{color:#ffb0a1}
