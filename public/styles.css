@@ -16,9 +16,18 @@
 #pause-status:empty{display:none}
 .room-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
 .room-actions .fine{flex-basis:100%;margin-top:0}
-.room-account{display:inline-block;text-decoration:none}
-.room-account:focus-visible{outline:3px solid #e4c983;outline-offset:5px}
-@media(max-width:530px){.room-actions{justify-content:flex-start}}
+.account-icon{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;margin-left:12px;border:1px solid #ffffff30;border-radius:50%;text-decoration:none;background:#ffffff12}
+.account-icon:hover{background:#ffffff20}
+.account-icon:focus-visible{outline:3px solid #e4c983;outline-offset:5px}
+@media(max-width:530px){
+  .room-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;align-items:stretch}
+  .room-actions #pause-controls,.room-actions .pause-buttons{display:contents}
+  .room-actions #copy-link{grid-column:1;grid-row:1}
+  .room-actions #pause-button{grid-column:2;grid-row:1}
+  .room-actions #copy-link,.room-actions #pause-button{width:100%;min-height:48px;padding:12px 8px;font-size:14px}
+  .room-actions #copy-status,.room-actions #pause-status{grid-column:1/-1;max-width:none;margin:0}
+  .room-actions #copy-status:empty{display:none}
+}
 .move-preview{min-height:42px;margin:12px 0;color:#b8cab5;font-size:13px;line-height:1.4;font-weight:700}
 .move-preview.legal{color:#dcf36b}
 .move-preview.illegal{color:#ffb0a1}

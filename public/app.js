@@ -73,6 +73,7 @@ function render() {
   show('landing', !roomId && !accountRoute);
   show('account-page', !roomId && accountRoute);
   show('room', Boolean(roomId));
+  show('header-account', Boolean(roomId));
   if (!room) return;
   $('room-code').textContent = room.id;
   $('room-heading').textContent = room.status === 'waiting' ? 'Waiting for a friend' : room.status === 'finished' ? 'Game complete' : room.status === 'paused' ? 'Game paused' : currentIsYou() ? 'Your move' : `${room.players[room.current]?.name}'s move`;
@@ -430,6 +431,14 @@ $('account-sign-out').addEventListener('click', () => {
   show('account-history', false);
   setError('account-error');
 });
+
+const mobileRoomLayout = window.matchMedia('(max-width: 530px)');
+function positionPauseControls() {
+  const destination = document.querySelector(mobileRoomLayout.matches ? '.room-actions' : '.score-controls');
+  destination.append($('pause-controls'));
+}
+mobileRoomLayout.addEventListener('change', positionPauseControls);
+positionPauseControls();
 
 if (roomId) {
   const queryToken = new URLSearchParams(location.search).get('token');
