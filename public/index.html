@@ -64,7 +64,7 @@
       </section>
       <section id="room" class="room hidden">
         <div class="room-header">
-          <div><p class="eyebrow">PRIVATE ROOM <span id="room-code"></span></p><h1 id="room-heading">Waiting for a friend</h1><p id="room-subtitle"></p></div>
+          <div><div class="room-meta"><p class="eyebrow">PRIVATE ROOM <span id="room-code"></span></p><p id="room-subtitle"></p></div><h1 id="room-heading">Waiting for a friend</h1></div>
           <div class="room-actions"><a href="/square-game/account" class="secondary room-account">Account</a><button id="delete-room" class="secondary hidden">Delete room</button><button id="copy-link" class="secondary">Copy invite link</button><span id="copy-status" class="fine"></span></div>
         </div>
         <p id="room-sign-in" class="fine hidden">Sign in to play day-length games. <a href="/square-game/account" target="_blank" rel="noopener">Sign in</a>, then return here.</p>
@@ -83,8 +83,7 @@
           <p id="invite-error" class="error" role="alert"></p>
         </div>
         <div id="game-panel" class="game-panel hidden">
-          <div class="scorebar"><div id="players"></div><div class="turn-box"><span id="turn-label"></span><strong id="countdown"></strong></div></div>
-          <div id="pause-controls" class="side-section hidden"><p id="pause-status" role="status"></p><button id="pause-button" class="secondary">Request pause</button> <button id="cancel-pause" class="secondary hidden">Cancel request</button></div>
+          <div class="scorebar"><div class="score-controls"><div id="players"></div><div id="pause-controls" class="hidden"><div class="pause-buttons"><button id="pause-button" class="secondary">Request pause</button><button id="cancel-pause" class="secondary hidden">Cancel request</button></div><p id="pause-status" role="status"></p></div></div><div class="turn-box"><span id="turn-label"></span><strong id="countdown"></strong></div></div>
           <div id="last-move" class="last-move hidden"></div>
           <div class="play-layout">
             <div class="board-wrap"><div class="board-head"><span>GAME BOARD</span><span id="deck-count"></span></div><div id="board" class="board" aria-label="Game board"></div></div>

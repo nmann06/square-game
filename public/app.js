@@ -285,7 +285,7 @@ function renderPauseControls() {
   const accepted = room.resumeAccepted.includes(index);
   $('pause-status').textContent = room.status === 'paused'
     ? accepted ? 'Waiting for your opponent to resume.' : 'Game paused. Both players must agree to resume.'
-    : requested ? mine ? 'Pause requested. The timer runs until your opponent accepts.' : 'Your opponent requested a pause. The timer is still running.' : 'Both players must agree to pause.';
+    : requested ? mine ? 'Pause requested. The timer runs until your opponent accepts.' : 'Your opponent requested a pause. The timer is still running.' : '';
   $('pause-button').textContent = room.status === 'paused' ? 'Agree to resume' : requested ? mine ? 'Pause requested' : 'Accept pause' : 'Request pause';
   $('pause-button').disabled = busy || (room.status === 'paused' ? accepted : requested && mine);
   show('cancel-pause', room.status === 'playing' && requested);

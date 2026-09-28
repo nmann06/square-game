@@ -7,6 +7,13 @@
 .site-mark span{color:#c9a54e}
 .game-title{font-weight:800;letter-spacing:-.04em;font-size:23px;text-decoration:none}
 .game-title:focus-visible{outline:3px solid #e4c983;outline-offset:5px}
+.room-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;margin-bottom:6px}
+.room-meta p{margin:0}
+#room-subtitle{font-size:13px}
+.score-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px;min-width:0}
+.pause-buttons{display:flex;flex-wrap:wrap;gap:8px}
+#pause-status{max-width:320px;margin:8px 0 0;color:#aec1ad;font-size:13px;line-height:1.4}
+#pause-status:empty{display:none}
 .room-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
 .room-actions .fine{flex-basis:100%;margin-top:0}
 .room-account{display:inline-block;text-decoration:none}
