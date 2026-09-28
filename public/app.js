@@ -20,6 +20,8 @@ let previewRevision = 0;
 let tradeIds = new Set();
 let timerSeconds = 120;
 let busy = false;
+let reviewTurn = null;
+let reviewRoomId = null;
 const symbols = { circle: '●', square: '■', triangle: '▲', star: '✦' };
 
 function show(id, yes) { $(id).classList.toggle('hidden', !yes); }
@@ -91,7 +93,101 @@ function render() {
   renderPauseControls();
   show('game-panel', room.status !== 'waiting');
   if (room.status === 'waiting') return;
-  renderScores(); renderBoard(); renderHand(); renderStaged(); renderLastMove(); updateCountdown();
+  if (reviewRoomId !== room.id) { reviewTurn = null; reviewRoomId = room.id; }
+  document.querySelector('.side-panel').classList.toggle('hidden', room.status === 'finished');
+  document.querySelector('.play-layout').classList.toggle('review-layout', room.status === 'finished');
+  renderScores(); renderBoard(); renderHand(); renderStaged(); renderLastMove(); updateCountdown(); renderReview();
+}
+function selectReviewTurn(turn) {
+  reviewTurn = turn;
+  renderReview(); renderBoard();
+}
+function renderReview() {
+  const parent = $('game-review');
+  show('game-review', room.status === 'finished');
+  if (room.status !== 'finished') return;
+  parent.replaceChildren();
+  const heading = element('div', 'review-heading');
+  const title = element('div');
+  title.append(element('p', 'eyebrow', 'POST-GAME ANALYSIS'));
+  const h2 = element('h2', '', 'Game review'); h2.id = 'review-heading'; title.append(h2);
+  const winner = room.players.find(player => player.id === room.winner);
+  title.append(element('p', 'fine', room.finishReason === 'missed-turns' ? 'Draw · game ended after missed turns' : winner ? `${winner.name} wins · ${room.players.map(p => p.score).join(' – ')}` : 'Draw · equal scores'));
+  const again = element('a', 'secondary', 'New game ↗'); again.href = basePath;
+  heading.append(title, again); parent.append(heading);
+  const review = room.review;
+  if (!review?.complete) parent.append(element('p', 'review-notice', 'This game started before turn tracking was available. Only recorded turns are shown; averages and highlights cover those turns.'));
+  if (!review?.turns.length) {
+    parent.append(element('p', 'fine', 'No turn history is available for this game. The final board and scores are shown below.'));
+    return;
+  }
+  parent.append(element('p', 'fine', 'Averages include passes and timeouts. Cards placed includes wild replacements. Turn numbers follow the order of play; ties share the highest or lowest mark.'));
+  const summaries = element('div', 'review-summaries');
+  room.players.forEach((player, index) => {
+    const stats = review.players.find(p => p.playerId === player.id);
+    const panel = element('article', `review-player player-${index}`);
+    panel.append(element('h3', '', player.name), element('strong', 'review-score', `${player.score} pts`));
+    const metrics = element('dl', 'review-metrics');
+    const metric = (label, value) => { const group = element('div'); group.append(element('dt', '', label), element('dd', '', value)); metrics.append(group); };
+    metric('Average cards / turn', stats.averageCards === null ? '—' : stats.averageCards.toFixed(2));
+    metric('Average points / turn', stats.averagePoints === null ? '—' : stats.averagePoints.toFixed(2));
+    metric('Cards placed', String(stats.cardsPlaced)); metric('Turns', String(stats.turns));
+    panel.append(metrics);
+    for (const [label, points, turns] of [['Highest', stats.highest, stats.highestTurns], ['Lowest', stats.lowest, stats.lowestTurns]]) {
+      const line = element('div', 'review-extreme');
+      line.append(element('span', '', `${label}: ${points === null ? '—' : `${points} pts`}`));
+      for (const turn of turns) { const button = element('button', 'review-turn-link', `#${turn}`); button.type = 'button'; button.setAttribute('aria-label', `${player.name}, ${label.toLowerCase()} scoring turn ${turn}, ${points} points`); button.onclick = () => selectReviewTurn(turn); line.append(button); }
+      panel.append(line);
+    }
+    summaries.append(panel);
+  });
+  parent.append(summaries);
+  parent.append(element('h3', '', 'Points per turn'));
+  const legend = element('div', 'review-legend');
+  room.players.forEach((p, i) => legend.append(element('span', `player-${i}`, p.name)));
+  parent.append(legend);
+  const chart = element('div', 'review-chart'); chart.setAttribute('aria-label', 'Points scored on each recorded turn');
+  const peak = Math.max(1, ...review.turns.map(t => t.points));
+  for (const turn of review.turns) {
+    const index = room.players.findIndex(p => p.id === turn.playerId);
+    const bar = element('button', `review-bar player-${index}${reviewTurn === turn.turn ? ' active' : ''}`);
+    bar.type = 'button'; bar.setAttribute('aria-label', `Turn ${turn.turn}: ${turn.playerName}, ${turn.points} points`);
+    bar.setAttribute('aria-pressed', String(reviewTurn === turn.turn));
+    bar.title = `#${turn.turn} · ${turn.playerName} · ${turn.points} pts`;
+    bar.append(element('span', 'review-bar-value', String(turn.points)));
+    const fill = element('span', 'review-bar-fill'); fill.style.height = `${Math.max(3, turn.points / peak * 110)}px`;
+    bar.append(fill, element('small', '', String(turn.turn))); bar.onclick = () => selectReviewTurn(turn.turn); chart.append(bar);
+  }
+  parent.append(chart);
+  const chosen = review.turns.find(t => t.turn === reviewTurn);
+  const detail = element('div', 'review-selection'); detail.setAttribute('role', 'status');
+  detail.append(element('p', '', chosen ? `Turn ${chosen.turn} · ${chosen.playerName} · +${chosen.points} points · ${chosen.cardsPlaced} cards placed` : 'Select a turn to inspect its cards and highlight their positions on the final board.'));
+  if (chosen) {
+    const cards = element('div', 'review-cards');
+    for (const placement of chosen.placements) { const item = element('div'); item.append(cardElement(placement.card), element('small', '', `(${placement.spot})${placement.kind === 'swap' ? ' · wild replacement' : ''}`)); cards.append(item); }
+    if (!chosen.placements.length) cards.append(element('span', 'fine', chosen.kind === 'timeout' ? 'Timed out · no cards placed' : 'Passed · no cards placed'));
+    detail.append(cards);
+    const clear = element('button', 'secondary', 'Clear selection'); clear.type = 'button'; clear.onclick = () => selectReviewTurn(null); detail.append(clear);
+  }
+  parent.append(detail);
+  const log = element('details', 'review-log'); log.open = true;
+  log.append(element('summary', '', 'Turn history · who placed each card'));
+  const scroll = element('div', 'review-table-scroll');
+  const table = element('table'); const caption = element('caption', 'fine', 'Recorded turns. The opening card is dealt automatically.'); table.append(caption);
+  const thead = element('thead'); const header = element('tr');
+  for (const label of ['Turn', 'Player', 'Action / cards placed', 'Points', 'Score']) { const th = element('th', '', label); th.scope = 'col'; header.append(th); }
+  thead.append(header); table.append(thead);
+  const body = element('tbody');
+  for (const turn of review.turns) {
+    const row = element('tr', reviewTurn === turn.turn ? 'selected-turn' : '');
+    const number = element('td'); const button = element('button', 'review-turn-link', `#${turn.turn}`); button.type = 'button'; button.setAttribute('aria-label', `Review turn ${turn.turn}`); button.onclick = () => selectReviewTurn(turn.turn); number.append(button);
+    const action = element('td'); action.append(element('span', 'fine', turn.kind === 'timeout' ? 'Timed out' : turn.kind === 'pass' ? 'Passed / traded' : 'Played'));
+    const cards = element('div', 'review-log-cards');
+    for (const p of turn.placements) { const item = element('span', 'review-log-card'); item.append(cardElement(p.card), element('small', '', `(${p.spot})${p.kind === 'swap' ? ' · swap' : ''}`)); cards.append(item); }
+    action.append(cards);
+    row.append(number, element('td', '', turn.playerName), action, element('td', 'review-points', `+${turn.points}`), element('td', '', turn.scores.join(' – '))); body.append(row);
+  }
+  table.append(body); scroll.append(table); log.append(scroll); parent.append(log);
 }
 function useAccount(email) {
   signedInEmail = email;
@@ -181,6 +277,8 @@ function renderBoard() {
   // Highlight the cards the other player placed on their last move.
   const you = room.players.find(p => p.isYou)?.id;
   const recent = new Set(room.lastMove && room.lastMove.playerId !== you ? room.lastMove.cells ?? [] : []);
+  const reviewed = room.status === 'finished' ? room.review?.turns.find(turn => turn.turn === reviewTurn) : null;
+  const reviewSpots = new Set(reviewed?.placements.map(p => p.spot) ?? []);
   const fragment = document.createDocumentFragment();
   for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
     const key = `${x},${y}`;
@@ -195,7 +293,14 @@ function renderBoard() {
       if (previewStatus.status === 'legal' || previewStatus.status === 'illegal') tile.classList.add(previewStatus.status);
       cell.append(tile);
     }
-    cell.addEventListener('click', () => boardClick(x, y, existing));
+    if (existing && room.status === 'finished') {
+      const owner = room.review?.turns.findLast(turn => turn.placements.some(p => p.spot === key && p.card.id === existing.id));
+      const attribution = owner ? `Placed by ${owner.playerName} on turn ${owner.turn}` : key === '0,0' && room.review?.complete ? 'Opening card · automatically dealt' : 'Placement history unavailable';
+      cell.title = attribution;
+      cell.setAttribute('aria-label', `${cell.getAttribute('aria-label')}. ${attribution}`);
+      cell.classList.toggle('review-highlight', reviewSpots.has(key));
+      cell.addEventListener('click', () => { if (owner) selectReviewTurn(owner.turn); });
+    } else cell.addEventListener('click', () => boardClick(x, y, existing));
     fragment.append(cell);
   }
   parent.append(fragment);
@@ -328,7 +433,7 @@ function updateCountdown() {
   $('countdown').textContent = days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 async function refresh() {
-  if (!roomId || busy) return;
+  if (!roomId || busy || room?.status === 'finished') return;
   accountToken = localStorage.getItem('square-account-token');
   try { room = (await api(`/api/rooms/${roomId}`)).room; render(); setError('room-error'); }
   catch (error) { setError('room-error', error.message); }

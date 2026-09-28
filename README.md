@@ -66,6 +66,10 @@ Either player can request a pause, which takes effect when the opponent accepts.
 
 ## Files
 
+Completed rooms include a post-game review with per-player averages, highest and lowest scoring turns (including ties), a points-per-turn chart, and a card placement log. Select a turn to inspect its cards and highlight its positions on the final board, or select a final board card to see who placed it. Averages include passes and timeouts; card counts include wild replacements. The opening card is dealt automatically and is not counted for either player.
+
+Turn history is stored in the existing room state and exposed in the public room response only after the game ends. Games created before this feature show an incomplete-history notice; past moves cannot be reconstructed. Deploy the game backend and synchronize the homepage browser assets with `node sync-game.js` from the homepage repository.
+
 - `game.js` — rules, turn progression, and scoring.
 - `server.js` — HTTP API and static site.
 - `store.js` — local development storage or Supabase REST storage with optimistic version checks.

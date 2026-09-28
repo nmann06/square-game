@@ -47,7 +47,8 @@ export function createGame({ name, email, accountEmail, timerSeconds = 120, now 
     id: roomCode(), status: 'waiting', timerSeconds, createdAt: now,
     players: [{ id: token(9), token: token(), name: cleanName(name), email: cleanEmail(email), ...(accountEmail ? { accountEmail } : {}), hand: [], score: 0 }],
     board: { '0,0': starter }, deck, current: 0, deadline: null,
-    consecutivePasses: 0, missedTurns: [0, 0], pendingSwap: null, lastMove: null, winner: null
+    consecutivePasses: 0, missedTurns: [0, 0], pendingSwap: null, lastMove: null, winner: null,
+    turnHistory: [], historyComplete: true
   };
   draw(game, game.players[0]);
   return game;
@@ -184,6 +185,7 @@ function finalize(game, index, { base, lots, count, kind, cells = [] }, now) {
   game.pauseRequestedBy = null;
   const player = game.players[index];
   const hadSwap = Boolean(game.pendingSwap);
+  const swapSpot = game.pendingSwap?.spot;
   const pending = kind === 'timeout' ? { base: 0, lots: 0 } : game.pendingSwap ?? { base: 0, lots: 0 };
   const combinedBase = pending.base + base;
   const combinedLots = pending.lots + lots;
@@ -196,6 +198,12 @@ function finalize(game, index, { base, lots, count, kind, cells = [] }, now) {
   game.missedTurns[index] = kind === 'timeout' ? game.missedTurns[index] + 1 : 0;
   game.consecutivePasses = kind === 'pass' && !hadSwap ? game.consecutivePasses + 1 : 0;
   game.lastMove = { playerId: player.id, playerName: player.name, kind, points, base: combinedBase, lots: combinedLots, at: now, cells: pending.spot ? [pending.spot, ...cells] : cells };
+  game.turnHistory ??= [];
+  const placements = [...(swapSpot ? [swapSpot] : []), ...cells].map(spot => ({
+    spot, card: copy(game.board[spot]), kind: spot === swapSpot ? 'swap' : 'play'
+  }));
+  game.turnHistory.push({ ...copy(game.lastMove), turn: game.turnHistory.length + 1,
+    placements, cardsPlaced: placements.length, scores: game.players.map(p => p.score) });
   if (game.missedTurns.some(count => count >= 2)) {
     game.status = 'finished';
     game.deadline = null;
@@ -329,8 +337,28 @@ export function publicGame(game, index) {
     board: game.board, hand: index >= 0 ? game.players[index].hand : [], deckCount: game.deck.length,
     current: game.current, deadline: game.deadline, pendingSwap: index === game.current ? game.pendingSwap : null,
     lastMove: game.lastMove, winner: game.winner, finishReason: game.finishReason ?? null,
+    ...(game.status === 'finished' ? { review: gameReview(game) } : {}),
     // Only the host sees invite details; the joining player never sees emails.
     ...(index === 0 ? { invites: (game.invites ?? []).map(invite => invite.email), hostHasEmail: Boolean(game.players[0].email) } : {})
+  };
+}
+export function gameReview(game) {
+  const turns = copy(game.turnHistory ?? []);
+  return {
+    complete: game.historyComplete === true, turns,
+    players: game.players.map(player => {
+      const own = turns.filter(turn => turn.playerId === player.id);
+      const cards = own.reduce((sum, turn) => sum + turn.cardsPlaced, 0);
+      const points = own.reduce((sum, turn) => sum + turn.points, 0);
+      const highest = own.length ? Math.max(...own.map(turn => turn.points)) : null;
+      const lowest = own.length ? Math.min(...own.map(turn => turn.points)) : null;
+      return { playerId: player.id, turns: own.length, cardsPlaced: cards,
+        averageCards: own.length ? cards / own.length : null,
+        averagePoints: own.length ? points / own.length : null,
+        highest, lowest,
+        highestTurns: own.filter(turn => turn.points === highest).map(turn => turn.turn),
+        lowestTurns: own.filter(turn => turn.points === lowest).map(turn => turn.turn) };
+    })
   };
 }
 export function accountSummary(games, email, now = Date.now()) {
