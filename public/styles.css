@@ -76,6 +76,28 @@ body:not(.account-route) .account-identity{display:none}
 .account-games a small{text-align:right}
 @media(max-width:850px){.landing{gap:28px;padding-top:35px}.hero-tiles{display:flex}.hero-tiles .tile{width:75px;height:92px;font-size:24px}.account-history{grid-template-columns:1fr}}
 @media(max-width:530px){.hero-tiles .tile{width:65px;height:80px;font-size:21px}.hero .account-panel{margin-top:30px}.account-page-header{align-items:start;flex-direction:column}.account-games a small{text-align:left}}
+/* Sign-in landing and explicit guest entry */
+.hero-tiles{position:relative;isolation:isolate}
+.hero-tiles.is-shuffling .tile{will-change:transform;box-shadow:0 22px 34px #0005}
+.hero-tiles.is-dealing .tile{box-shadow:0 16px 28px #0004}
+.login-landing{align-items:center;max-width:1180px;margin:auto;grid-template-columns:1.15fr 1fr;gap:72px}
+#landing-account{min-width:0;width:100%;max-width:460px;justify-self:end}
+#landing-account .account-panel{margin:0;padding:32px}
+#landing-account .account-panel h2{font-size:28px;letter-spacing:-.04em}
+#landing-account .account-panel .eyebrow{font-size:11px;letter-spacing:.16em;color:#52683d;margin-bottom:14px;font-weight:800}
+#landing-account .account-form{display:grid;gap:12px;margin-top:22px}
+#landing-account .account-form button{width:100%;padding:14px}
+#landing-account .account-panel>div>p:not(.eyebrow):not(.error){line-height:1.65}
+.guest-option{margin-top:24px;border-top:1px solid #d5dccd;text-align:center}
+.guest-option>span{display:table;margin:-10px auto 18px;padding:0 12px;background:#f3f2e9;color:#607362;font-size:12px}
+.guest-option .secondary{background:transparent;border:1px solid #a5b49c}
+.guest-option .secondary:hover{background:#e4e9d8}
+.guest-option .fine{max-width:310px;margin:12px auto 0!important;font-size:12px}
+.guest-status{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #d5dccd;padding-bottom:16px;margin-bottom:24px;color:#607362;font-size:13px}
+.guest-status button{border:0;background:none;color:#285b36;text-decoration:underline;text-underline-offset:3px;font-weight:700;padding:4px}
+.setup .fine{color:#607362}
+@media(max-width:850px){.login-landing{grid-template-columns:1fr;gap:38px;min-height:auto;max-width:540px;padding-top:32px}.login-landing .hero{text-align:center}.login-landing .hero-tiles{justify-content:center;margin-bottom:12px}#landing-account{max-width:none}.login-landing .hero h1{margin-top:0}}
+@media(max-width:530px){#landing-account .account-panel{padding:24px}.login-landing{gap:28px;padding-bottom:20px}#landing-account .account-panel h2{font-size:26px}}
 /* Post-game review */
 .game-review{margin:20px 0 28px;padding:28px;border:1px solid #ffffff25;border-radius:18px;background:#192f25}
 .review-heading{display:flex;justify-content:space-between;align-items:center;gap:20px}.review-heading h2{font-size:32px;letter-spacing:-.04em;margin:0}.review-heading .eyebrow{margin:0 0 8px}.review-heading a{text-decoration:none;white-space:nowrap}

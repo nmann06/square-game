@@ -13,6 +13,7 @@ let roomId = location.pathname.match(/^\/square-game\/room\/([\w-]+)$/)?.[1] ?? 
 let playerToken = null;
 let accountToken = localStorage.getItem('square-account-token');
 let signedInEmail = null;
+let guestMode = sessionStorage.getItem('square-guest-mode') === 'true';
 let selected = null;
 let staged = [];
 let previewStatus = { status: 'empty', message: 'Place tiles to preview your score.' };
@@ -70,12 +71,77 @@ function formatTimer(seconds) {
   return `${seconds / 86400} day${seconds === 86400 ? '' : 's'}`;
 }
 function currentIsYou() { return room?.players[room.current]?.isYou; }
+let heroShuffle = null;
+function shuffleHeroCards() {
+  if (roomId || accountRoute || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (heroShuffle) return heroShuffle;
+  heroShuffle = (async () => {
+    const cards = document.querySelector('.hero-tiles');
+    const tiles = [...cards.children];
+    const center = (tiles[0].offsetLeft + tiles.at(-1).offsetLeft + tiles.at(-1).offsetWidth) / 2;
+    const poses = tiles.map((tile, index) => ({
+      rest: getComputedStyle(tile).transform,
+      x: center - tile.offsetLeft - tile.offsetWidth / 2,
+      y: -18 - index * 3,
+      side: index % 2 ? 1 : -1
+    }));
+    const animations = [];
+    const pose = (p, dx = 0, dy = 0, angle = -5) => `translate(${p.x + dx}px, ${p.y + dy}px) rotate(${angle}deg) scale(.96)`;
+    const play = async (frames, timing) => {
+      const batch = tiles.map((tile, index) => tile.animate(frames(poses[index], index), { fill: 'forwards', ...timing(index) }));
+      animations.push(...batch);
+      await Promise.all(batch.map(animation => animation.finished.catch(() => {})));
+    };
+    cards.classList.add('is-shuffling');
+    try {
+      // Gather the fan, then cut and interleave two halves of the deck.
+      await play((p, i) => [
+        { transform: p.rest, zIndex: i + 1 },
+        { transform: pose(p), zIndex: i + 1 }
+      ], () => ({ duration: 260, easing: 'cubic-bezier(.4,0,.2,1)' }));
+      const split = Math.min(tiles[0].offsetWidth * .65, 70);
+      await play((p, i) => [
+        { transform: pose(p), zIndex: i + 1, offset: 0 },
+        { transform: pose(p, p.side * split, p.side * -18, p.side * 14), zIndex: i + 1, offset: .24 },
+        { transform: pose(p, 0, -8, 4), zIndex: 4 - i, offset: .48 },
+        { transform: pose(p, -p.side * split * .8, p.side * 14, -p.side * 11), zIndex: 4 - i, offset: .73 },
+        { transform: pose(p), zIndex: i + 1, offset: 1 }
+      ], () => ({ duration: 620, easing: 'ease-in-out' }));
+      cards.classList.add('is-dealing');
+      // Peel off the top card first, with a little lift and an overshoot on landing.
+      await play((p, i) => [
+        { transform: pose(p), zIndex: i + 1, offset: 0 },
+        { transform: `translate(${p.x * .5}px, -48px) rotate(${p.side * 16}deg) scale(1.04)`, zIndex: 10 + i, offset: .38 },
+        { transform: `translate(${-p.x * .06}px, 4px) ${p.rest}`, zIndex: 10 + i, offset: .8 },
+        { transform: p.rest, zIndex: i + 1, offset: 1 }
+      ], i => ({ duration: 320, delay: (tiles.length - 1 - i) * 360, easing: 'cubic-bezier(.2,.65,.3,1)' }));
+    } finally {
+      for (const animation of animations) animation.cancel();
+      cards.classList.remove('is-shuffling', 'is-dealing');
+    }
+  })().finally(() => { heroShuffle = null; });
+  return heroShuffle;
+}
+function renderLanding() {
+  if (accountRoute || roomId) return;
+  const signedIn = Boolean(signedInEmail);
+  const canSetUp = signedIn || guestMode;
+  const destination = $(signedIn ? 'hero-account' : 'landing-account');
+  if ($('account-panel').parentElement !== destination) destination.append($('account-panel'));
+  show('landing-account', !canSetUp);
+  show('account-panel', signedIn || !guestMode);
+  show('room-setup', canSetUp);
+  show('guest-status', guestMode && !signedIn);
+  show('header-account', signedIn);
+  $('landing').classList.toggle('login-landing', !canSetUp);
+}
 function render() {
   show('account-panel', !roomId);
   show('landing', !roomId && !accountRoute);
   show('account-page', !roomId && accountRoute);
   show('room', Boolean(roomId));
   show('header-account', Boolean(roomId));
+  renderLanding();
   if (!room) return;
   $('room-code').textContent = room.id;
   $('room-heading').textContent = room.status === 'waiting' ? 'Waiting for a friend' : room.status === 'finished' ? 'Game complete' : room.status === 'paused' ? 'Game paused' : currentIsYou() ? 'Your move' : `${room.players[room.current]?.name}'s move`;
@@ -202,6 +268,7 @@ async function refreshAccount() {
   if (!accountToken) {
     show('account-sign-in', true); show('account-profile', false);
     show('account-history', false);
+    renderLanding();
     return;
   }
   try {
@@ -240,6 +307,7 @@ async function refreshAccount() {
       $('account-error').textContent = 'Your sign-in expired. Request a new code.';
     } else $('account-error').textContent = error.message;
   }
+  renderLanding();
 }
 async function linkSavedRooms() {
   if (!accountToken) return;
@@ -507,6 +575,23 @@ $('code-request-form').addEventListener('submit', async event => {
   } catch (error) { $('account-message').textContent = ''; setError('account-error', error.message); }
   finally { button.disabled = false; }
 });
+$('play-as-guest').addEventListener('click', async () => {
+  const button = $('play-as-guest');
+  button.disabled = true;
+  await shuffleHeroCards();
+  guestMode = true;
+  sessionStorage.setItem('square-guest-mode', 'true');
+  if (accountRoute) { location.href = basePath; return; }
+  renderLanding();
+  $('create-name').focus();
+  button.disabled = false;
+});
+$('guest-sign-in').addEventListener('click', () => {
+  guestMode = false;
+  sessionStorage.removeItem('square-guest-mode');
+  renderLanding();
+  $('account-email').focus();
+});
 $('code-verify-form').addEventListener('submit', async event => {
   event.preventDefault();
   const button = event.currentTarget.querySelector('button');
@@ -514,7 +599,10 @@ $('code-verify-form').addEventListener('submit', async event => {
   setError('account-error');
   try {
     const result = await api('/api/account/verify-code', { method: 'POST', body: JSON.stringify({ email: $('account-email').value, code: $('account-code').value }) });
+    await shuffleHeroCards();
     accountToken = result.token;
+    guestMode = false;
+    sessionStorage.removeItem('square-guest-mode');
     localStorage.setItem('square-account-token', accountToken);
     $('account-code').value = '';
     show('code-verify-form', false);
@@ -522,12 +610,15 @@ $('code-verify-form').addEventListener('submit', async event => {
     await linkSavedRooms();
     await refreshAccount();
     if (roomId) await refresh();
+    else if (!accountRoute) $('create-name').focus();
   } catch (error) { setError('account-error', error.message); }
   finally { button.disabled = false; }
 });
 $('account-sign-out').addEventListener('click', () => {
   const email = signedInEmail;
   localStorage.removeItem('square-account-token'); accountToken = null; signedInEmail = null;
+  guestMode = false;
+  sessionStorage.removeItem('square-guest-mode');
   for (const id of ['host-email']) {
     $(id).readOnly = false;
     if ($(id).value === email) $(id).value = '';
@@ -535,6 +626,7 @@ $('account-sign-out').addEventListener('click', () => {
   show('account-sign-in', true); show('account-profile', false);
   show('account-history', false);
   setError('account-error');
+  renderLanding();
 });
 
 const mobileRoomLayout = window.matchMedia('(max-width: 530px)');

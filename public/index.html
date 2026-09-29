@@ -17,18 +17,23 @@
     </header>
 
     <main>
-      <section id="landing" class="landing">
+      <section id="landing" class="landing login-landing">
         <div class="hero">
           <h1>Square Game.</h1>
           <div class="hero-tiles" aria-hidden="true"><span class="tile red">●<small>3</small></span><span class="tile yellow">■<small>1</small></span><span class="tile blue">▲<small>4</small></span><span class="tile green">✦<small>2</small></span></div>
+          <div id="hero-account"></div>
+        </div>
+        <div id="landing-account">
           <section id="account-panel" class="account-panel card-panel">
             <div id="account-sign-in">
-              <h2>Keep track of your games</h2>
-              <p>Sign in with your email to see your record and return to games in progress. No password needed.</p>
+              <p class="eyebrow">LET’S PLAY</p>
+              <h2>Sign in to Square Game</h2>
+              <p>Save your progress and pick up where you left off. We’ll email you a sign-in code. No password needed.</p>
               <form id="code-request-form" class="account-form"><label>Email <input id="account-email" type="email" autocomplete="email" placeholder="you@example.com" required></label><button class="primary" type="submit">Email me a code</button></form>
               <form id="code-verify-form" class="account-form hidden"><label>Six-digit code <input id="account-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label><button class="primary" type="submit">Verify and sign in</button></form>
               <p id="account-message" class="fine" role="status" aria-live="polite"></p>
               <p id="account-error" class="error" role="alert"></p>
+              <div class="guest-option"><span>or</span><button id="play-as-guest" class="secondary wide" type="button">Play as guest <span aria-hidden="true">↗</span></button><p class="fine">Jump into a quick game. Sign in for day-length turns and game history.</p></div>
             </div>
             <div id="account-profile" class="hidden">
               <div class="account-heading"><div><p class="eyebrow">YOUR SQUARE GAME ACCOUNT</p><h2>Your account</h2><p id="account-identity" class="account-identity"></p></div><button id="account-sign-out" class="account-sign-out" type="button">Sign out</button></div>
@@ -37,7 +42,8 @@
             </div>
           </section>
         </div>
-        <div class="setup card-panel">
+        <div id="room-setup" class="setup card-panel hidden">
+          <div id="guest-status" class="guest-status hidden"><span>Playing as guest</span><button id="guest-sign-in" type="button">Sign in</button></div>
           <h2>Create a room</h2>
           <label>Your name <input id="create-name" maxlength="30" placeholder="Player one" autocomplete="name"></label>
           <div class="timer-head"><span>Turn timer</span><strong id="minute-label">2 minutes</strong></div>
