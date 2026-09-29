@@ -392,7 +392,7 @@ function renderHand() {
   renderControls();
 }
 function renderStaged() {
-  $('staged').textContent = staged.length ? `${staged.length} card${staged.length === 1 ? '' : 's'} staged: ${staged.map(p => `(${p.x}, ${p.y})`).join(', ')}` : room.pendingSwap ? `Wild exchanged · base ${room.pendingSwap.base}, ${room.pendingSwap.lots} lot(s). Now play your turn.` : 'No cards staged.';
+  $('staged').textContent = staged.length ? `${staged.length} card${staged.length === 1 ? '' : 's'} staged: ${staged.map(p => `(${p.x}, ${p.y})`).join(', ')}` : room.pendingSwap ? `Wild exchanges · base ${room.pendingSwap.base}, ${room.pendingSwap.lots} lot(s). Exchange another wild or play your turn.` : 'No cards staged.';
   updatePreview();
 }
 function showPreview() {
@@ -440,7 +440,7 @@ function boardClick(x, y, existing) {
   if (!room || room.status !== 'playing' || !currentIsYou() || busy || !selected || $('trade-mode').checked) return;
   const card = room.hand.find(item => item.id === selected);
   if (!card) return;
-  if (existing?.wild && !staged.length && !room.pendingSwap && !card.wild) {
+  if (existing?.wild && !staged.length && !card.wild) {
     act({ type: 'swap', x, y, cardId: card.id });
     return;
   }

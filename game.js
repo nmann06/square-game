@@ -182,11 +182,15 @@ function scoreLines(lines, changed) {
     lines: affected.length
   };
 }
+function swapSpots(pending) {
+  // Rooms saved before multiple exchanges used a single spot.
+  return pending?.spots ?? (pending?.spot ? [pending.spot] : []);
+}
 function finalize(game, index, { base, lots, count, kind, cells = [] }, now) {
   game.pauseRequestedBy = null;
   const player = game.players[index];
   const hadSwap = Boolean(game.pendingSwap);
-  const swapSpot = game.pendingSwap?.spot;
+  const exchangedSpots = swapSpots(game.pendingSwap);
   const pending = kind === 'timeout' ? { base: 0, lots: 0 } : game.pendingSwap ?? { base: 0, lots: 0 };
   const combinedBase = pending.base + base;
   const combinedLots = pending.lots + lots;
@@ -198,10 +202,10 @@ function finalize(game, index, { base, lots, count, kind, cells = [] }, now) {
   game.missedTurns ??= [0, 0];
   game.missedTurns[index] = kind === 'timeout' ? game.missedTurns[index] + 1 : 0;
   game.consecutivePasses = kind === 'pass' && !hadSwap ? game.consecutivePasses + 1 : 0;
-  game.lastMove = { playerId: player.id, playerName: player.name, kind, points, base: combinedBase, lots: combinedLots, at: now, cells: pending.spot ? [pending.spot, ...cells] : cells };
+  game.lastMove = { playerId: player.id, playerName: player.name, kind, points, base: combinedBase, lots: combinedLots, at: now, cells: kind === 'timeout' ? cells : [...exchangedSpots, ...cells] };
   game.turnHistory ??= [];
-  const placements = [...(swapSpot ? [swapSpot] : []), ...cells].map(spot => ({
-    spot, card: copy(game.board[spot]), kind: spot === swapSpot ? 'swap' : 'play'
+  const placements = [...exchangedSpots, ...cells].map(spot => ({
+    spot, card: copy(game.board[spot]), kind: exchangedSpots.includes(spot) ? 'swap' : 'play'
   }));
   game.turnHistory.push({ ...copy(game.lastMove), turn: game.turnHistory.length + 1,
     placements, cardsPlaced: placements.length, scores: game.players.map(p => p.score) });
@@ -262,7 +266,6 @@ export function playCards(source, index, placements, now = Date.now()) {
 export function swapWild(source, index, { x, y, cardId }, now = Date.now()) {
   const game = copy(source);
   requireTurn(game, index);
-  if (game.pendingSwap) fail('You can exchange only one wild card before a turn.');
   const spot = key(coord(x), coord(y));
   const wild = game.board[spot];
   if (!wild?.wild) fail('There is no wild card in that space.');
@@ -273,7 +276,11 @@ export function swapWild(source, index, { x, y, cardId }, now = Date.now()) {
   const lines = validateBoard(game.board);
   const score = scoreLines(lines, new Set([spot]));
   player.hand[handIndex] = { id: wild.id, wild: true };
-  game.pendingSwap = { base: score.base, lots: score.lots, at: now, spot };
+  game.pendingSwap = {
+    base: (game.pendingSwap?.base ?? 0) + score.base,
+    lots: (game.pendingSwap?.lots ?? 0) + score.lots,
+    at: now, spots: [...swapSpots(game.pendingSwap), spot]
+  };
   return game;
 }
 export function passTurn(source, index, tradeIds = [], now = Date.now()) {

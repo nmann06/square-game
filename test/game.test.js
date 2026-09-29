@@ -130,7 +130,7 @@ test('wild exchange scores two existing lots and a subsequent lot stacks a third
     ], pendingSwap: null, consecutivePasses: 0, timerSeconds: 60, deadline: 100000, lastMove: null
   };
   const swapped = swapWild(game, 0, { x: 0, y: 0, cardId: 'replace' });
-  assert.deepEqual(swapped.pendingSwap, { base: 20, lots: 2, at: swapped.pendingSwap.at, spot: '0,0' });
+  assert.deepEqual(swapped.pendingSwap, { base: 20, lots: 2, at: swapped.pendingSwap.at, spots: ['0,0'] });
   assert.equal(swapped.players[0].hand.some(card => card.id === 'wild'), true);
   const played = playCards(swapped, 0, [{ x: -6, y: 1, cardId: 'finish' }], 5000);
   assert.equal(played.lastMove.base, 30);
@@ -192,5 +192,61 @@ test('wild exchange is limited to a legal regular card before the main move', ()
   assert.throws(() => swapWild(game, 0, { x: 0, y: 0, cardId: 'ownwild' }), /regular card/);
   assert.throws(() => swapWild(game, 0, { x: 1, y: 0, cardId: 'regular' }), /no wild card/);
   const swapped = swapWild(game, 0, { x: 0, y: 0, cardId: 'regular' });
-  assert.throws(() => swapWild(swapped, 0, { x: 0, y: 0, cardId: 'regular' }), /only one wild card/);
+  assert.throws(() => swapWild(swapped, 0, { x: 0, y: 0, cardId: 'regular' }), /no wild card/);
+});
+
+function multipleWildFixture() {
+  return {
+    status: 'playing', current: 0,
+    board: { '0,0': c('a', 'red', 'circle', 1), '1,0': c('b', 'blue', 'square', 2),
+      '2,0': { id: 'w1', wild: true }, '3,0': { id: 'w2', wild: true } },
+    deck: [], players: [
+      { id: 'p1', hand: [c('r1', 'green', 'triangle', 3), c('r2', 'yellow', 'star', 4), c('play', 'red', 'circle', 1), c('bad', 'red', 'star', 4)], score: 0 },
+      { id: 'p2', hand: [], score: 0 }
+    ], pendingSwap: null, consecutivePasses: 0, timerSeconds: 60, deadline: 10000
+  };
+}
+
+test('multiple preturn exchanges accumulate scoring, keep every placement, and allow recovered wilds to be played', () => {
+  const initial = multipleWildFixture();
+  const first = swapWild(initial, 0, { x: 2, y: 0, cardId: 'r1' }, 1);
+  const second = swapWild(first, 0, { x: 3, y: 0, cardId: 'r2' }, 2);
+  assert.equal(first.pendingSwap.base, 6);
+  assert.deepEqual(second.pendingSwap, { base: 16, lots: 2, at: 2, spots: ['2,0', '3,0'] });
+  assert.deepEqual(second.players[0].hand.slice(0, 2), [{ id: 'w1', wild: true }, { id: 'w2', wild: true }]);
+  assert.equal(second.current, 0);
+  assert.equal(second.deadline, initial.deadline);
+  assert.equal(second.players[0].score, 0);
+  const played = playCards(second, 0, [{ x: 0, y: 1, cardId: 'play' }], 3);
+  assert.equal(played.lastMove.points, 72); // (6 + 10 + 2) * 2^2
+  assert.deepEqual(played.lastMove.cells, ['2,0', '3,0', '0,1']);
+  assert.deepEqual(played.turnHistory[0].placements.map(p => p.kind), ['swap', 'swap', 'play']);
+  assert.equal(played.turnHistory[0].cardsPlaced, 3);
+  assert.equal(played.pendingSwap, null);
+  assert.throws(() => swapWild(played, 0, { x: 2, y: 0, cardId: 'bad' }), /not your turn/);
+  const reused = playCards(second, 0, [{ x: 0, y: 1, cardId: 'w1' }, { x: 1, y: 1, cardId: 'w2' }], 3);
+  assert.equal(reused.board['0,1'].id, 'w1');
+  assert.equal(reused.board['1,1'].id, 'w2');
+  const passed = passTurn(second, 0, [], 3);
+  assert.equal(passed.lastMove.points, 64);
+  assert.equal(passed.consecutivePasses, 0);
+  assert.equal(passed.turnHistory[0].cardsPlaced, 2);
+  const expired = advanceExpired(second, second.deadline);
+  assert.equal(expired.lastMove.points, 0);
+  assert.equal(expired.turnHistory[0].cardsPlaced, 2);
+  assert.deepEqual(expired.turnHistory[0].placements.map(p => p.card.id), ['r1', 'r2']);
+  assert.equal(expired.pendingSwap, null);
+});
+
+test('saved single-exchange rooms can continue exchanging or finalize without migration', () => {
+  const first = swapWild(multipleWildFixture(), 0, { x: 2, y: 0, cardId: 'r1' }, 1);
+  first.pendingSwap = { base: 6, lots: 1, at: 1, spot: '2,0' };
+  const saved = JSON.parse(JSON.stringify(first));
+  assert.throws(() => swapWild(saved, 0, { x: 3, y: 0, cardId: 'bad' }), /invalid line/);
+  assert.deepEqual(saved, first);
+  const second = swapWild(saved, 0, { x: 3, y: 0, cardId: 'r2' }, 2);
+  assert.equal(passTurn(second, 0, [], 3).lastMove.points, 64);
+  assert.deepEqual(second.pendingSwap.spots, ['2,0', '3,0']);
+  assert.equal(passTurn(saved, 0, [], 3).lastMove.points, 12);
+  assert.equal(advanceExpired(saved, saved.deadline).turnHistory[0].placements[0].card.id, 'r1');
 });
