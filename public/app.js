@@ -545,13 +545,37 @@ function positionPauseControls() {
 mobileRoomLayout.addEventListener('change', positionPauseControls);
 positionPauseControls();
 
-if (roomId) {
-  const queryToken = new URLSearchParams(location.search).get('token');
-  playerToken = queryToken || localStorage.getItem(`square-token-${roomId}`);
-  if (queryToken) { localStorage.setItem(`square-token-${roomId}`, queryToken); history.replaceState(null, '', `${basePath}/room/${roomId}`); }
-  refresh();
+async function start() {
+  let signInError;
+  if (roomId) {
+    const signInLink = new URLSearchParams(location.hash.slice(1)).get('signin');
+    const queryToken = new URLSearchParams(location.search).get('token');
+    playerToken = queryToken || localStorage.getItem(`square-token-${roomId}`);
+    // Remove credentials before fetching or polling the room.
+    if (queryToken || signInLink) history.replaceState(null, '', `${basePath}/room/${roomId}`);
+    if (queryToken) localStorage.setItem(`square-token-${roomId}`, queryToken);
+    if (signInLink) {
+      try {
+        const result = await api('/api/account/turn-link', { method: 'POST', body: JSON.stringify({ token: signInLink, roomId }) });
+        accountToken = result.token;
+        signedInEmail = result.email;
+        playerToken = result.playerToken;
+        localStorage.setItem('square-account-token', accountToken);
+        localStorage.setItem(`square-token-${roomId}`, playerToken);
+      } catch (error) { signInError = error.message; }
+    }
+    await refresh();
+  }
+  if (accountToken && roomId && playerToken) await linkSavedRooms();
+  await refreshAccount();
+  if (signInError) {
+    setError('room-error', signInError);
+    // Keep recovery available even if this browser had another account signed in.
+    const recovery = element('a', '', ' Sign in with an email code');
+    recovery.href = `${basePath}/account`;
+    $('room-error').append(recovery);
+  }
+  setInterval(updateCountdown, 1000);
+  if (!signInError) setInterval(refresh, 10000);
 }
-if (accountToken && roomId && playerToken) linkSavedRooms().then(refreshAccount);
-else refreshAccount();
-setInterval(updateCountdown, 1000);
-setInterval(refresh, 10000);
+start();

@@ -14,6 +14,8 @@ The browser submits only a proposed move, pass, or wild exchange. The server hol
 
 ## Run locally
 
+Verification and turn emails include branded HTML and plain-text fallbacks. The turn email's personal link signs the recipient into their account and opens the room. Links expire at the turn deadline or after seven days, whichever comes first, and can be reused until then. They are signed with `ACCOUNT_SECRET`, bound to the room and verified player, and exchanged for the normal account session. The browser removes the link credential from its address bar before loading the room; expired links offer email-code sign-in. Deploy the game backend and sync/deploy the homepage client together for this flow. No database migration or additional environment variables are needed.
+
 Requires Node.js 20 or newer. No npm packages are required.
 
 ```bash
@@ -52,7 +54,20 @@ Accounts use a six-digit email code that expires after ten minutes and can be us
 
 While a room is waiting, the host can email up to three invites from the room page. The invite contains the general room link and code. When anyone joins a room that had an emailed invite, the host gets an email saying the invite was accepted, with their personal rejoin link. Hosts who created the room without an email are asked for one when sending the first invite. Invites work with any timer but need the Resend variables above.
 
-The countdown is enforced when a room is next opened or used. On a free Render service there is no always-on worker, so an expired turn is advanced on the next request rather than exactly at the deadline. Emails are sent when a move is saved; there are no scheduled reminder emails. Render's free service can sleep when idle, so opening an email link can have a cold start.
+The countdown is enforced when a room is next opened or used. With the optional reminder scheduler below, expired day turns also advance on scheduled checks. Render's free service can sleep when idle, so opening an email link or sending a reminder can have a cold start.
+
+### Two-hour email reminders on the existing Render plan
+
+The optional [Supabase Cron schedule](reminder-schedule.sql) checks every minute and calls the existing game service only when a day-turn reminder is due or a day turn has expired. It requires no paid Render cron service and uses the existing Supabase and Resend services within their normal quotas. Reminder emails include HTML, plain text, the deadline, and a personal sign-in button. They are sent at the first check with two hours or less remaining; cold starts or service outages can delay delivery. Waiting, paused, finished, expired, and minute-length turns do not receive reminders. Resuming a turn that already received its reminder does not send another.
+
+To enable after deploying the backend:
+
+1. Set `REMINDER_SECRET` on the existing Render web service to a new random secret of at least 32 characters, distinct from `ACCOUNT_SECRET`.
+2. In Supabase Vault, create `square_reminder_secret` with the same value and `square_reminder_url` with `https://YOUR-GAME-SERVICE.onrender.com/square-game/api/reminders/run`. Use the backend address, not the static homepage address.
+3. Run [`reminder-schedule.sql`](reminder-schedule.sql) in the Supabase SQL editor as the project administrator. It enables `pg_cron` and `pg_net` and creates one named job. Re-running the script updates that job.
+4. Monitor the `square-game-reminders` job and `net._http_response`. The authenticated endpoint returns counts for sent reminders, advanced rooms, and failed operations; a failure returns HTTP 503 and is retried on the next check.
+
+Delivery markers persist in the existing room state. Resend idempotency keys protect against duplicate delivery after retries or overlapping requests. The scheduler rechecks current room state before sending and merges markers with optimistic concurrency so it cannot overwrite a player move. There is no scheduler until this setup is completed. To disable it, run `select cron.unschedule('square-game-reminders');`. No homepage change is required for reminders.
 
 Either player can request a pause, which takes effect when the opponent accepts. The timer keeps running until acceptance; a turn ending clears an outstanding request. While paused, moves and timeouts stop. Both players must agree to resume, restoring the remaining turn time. The host can delete a waiting room before another player joins.
 

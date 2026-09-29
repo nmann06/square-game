@@ -91,6 +91,21 @@ export async function listAccountRooms(email) {
   return Object.values(await localRead()).map(row => row.state).filter(game => game.players.some(player => player.accountEmail === email));
 }
 export const durableStorage = Boolean(url && secret);
+export async function listActiveDayRoomIds() {
+  if (durableStorage) {
+    const ids = [];
+    // Keyset pagination remains stable as the worker finishes expired rooms.
+    let after = '';
+    for (;;) {
+      const rows = await remote('GET', `?select=id&state->>status=eq.playing&state->>timerSeconds=in.(86400,172800,259200,604800)&order=id.asc&limit=500${after ? `&id=gt.${encodeURIComponent(after)}` : ''}`);
+      ids.push(...rows.map(row => row.id));
+      if (rows.length < 500) return ids;
+      after = rows.at(-1).id;
+    }
+  }
+  return Object.values(await localRead()).map(row => row.state)
+    .filter(game => game.status === 'playing' && game.timerSeconds >= 86400).map(game => game.id);
+}
 // Returns false if the room id is already taken.
 async function createRoomUnlocked(game) {
   if (durableStorage) {

@@ -21,6 +21,28 @@ export function codeMatches(email, code, hash) {
 function signature(payload) {
   return createHmac('sha256', secret()).update(`square-session:${payload}`).digest('hex');
 }
+// Turn links are purpose-bound credentials, separate from account sessions.
+function turnSignature(payload) {
+  return createHmac('sha256', secret()).update(`square-turn-link:${payload}`).digest('hex');
+}
+export function issueTurnLink(game, player, now = Date.now()) {
+  if (!accountReady() || !player.accountEmail || player.email !== player.accountEmail) return null;
+  const expires = Math.min(Number(game.deadline), now + 7 * 86400000);
+  if (!Number.isFinite(expires) || expires <= now) return null;
+  const payload = Buffer.from(JSON.stringify({ room: game.id, player: player.id, email: player.accountEmail, expires })).toString('base64url');
+  return `${payload}.${turnSignature(payload)}`;
+}
+export function readTurnLink(token, now = Date.now()) {
+  if (!accountReady() || typeof token !== 'string' || token.length > 2048) return null;
+  const parts = token.split('.');
+  if (parts.length !== 2 || !/^[A-Za-z0-9_-]+$/.test(parts[0]) || !/^[0-9a-f]{64}$/.test(parts[1])) return null;
+  if (!timingSafeEqual(Buffer.from(turnSignature(parts[0]), 'hex'), Buffer.from(parts[1], 'hex'))) return null;
+  try {
+    const data = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+    if (typeof data.room !== 'string' || typeof data.player !== 'string' || !Number.isFinite(data.expires) || data.expires <= now || accountEmail(data.email) !== data.email) return null;
+    return data;
+  } catch { return null; }
+}
 export function issueSession(email, now = Date.now()) {
   if (!accountReady()) throw new Error('Account sign-in is not configured.');
   const payload = `${Buffer.from(email).toString('base64url')}.${now + SESSION_MS}`;

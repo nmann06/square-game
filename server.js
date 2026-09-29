@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +9,8 @@ import {
 } from './game.js';
 import { createRoom, getRoom, updateRoom, deleteRoom, durableStorage, getLoginChallenge, saveLoginChallenge, updateLoginChallenge, verifyLoginChallenge, listAccountRooms } from './store.js';
 import { mailReady, notifyNextPlayer, sendInvite, notifyInviteAccepted, sendFeedback, sendSignInCode } from './mail.js';
-import { accountReady, accountEmail, newCode, codeHash, issueSession, readSession } from './account.js';
+import { accountReady, accountEmail, newCode, codeHash, issueSession, readSession, readTurnLink } from './account.js';
+import { runReminders } from './reminders.js';
 
 const port = Number(process.env.PORT || 10000);
 const basePath = '/square-game';
@@ -26,6 +28,7 @@ const files = new Map([
 const feedbackAttempts = new Map();
 const codeRequests = new Map();
 const codeAttempts = new Map();
+let reminderRun = null;
 
 function allowedRequestOrigin(req) {
   if (allowedOrigins.has(req.headers.origin)) return true;
@@ -116,6 +119,17 @@ async function handler(req, res) {
     return;
   }
   if (path === '/health') return send(res, 200, { ok: true, durableStorage, emailConfigured: mailReady(), accountConfigured: mailReady() && accountReady() && (durableStorage || !process.env.RENDER) });
+  if (path === '/api/reminders/run' && req.method === 'POST') {
+    const secret = process.env.REMINDER_SECRET;
+    const supplied = req.headers.authorization?.replace(/^Bearer /, '') ?? '';
+    if (!secret || secret.length < 32) return send(res, 503, { error: 'Reminders are not configured.' });
+    const expectedBytes = Buffer.from(secret), suppliedBytes = Buffer.from(supplied);
+    if (expectedBytes.length !== suppliedBytes.length || !timingSafeEqual(expectedBytes, suppliedBytes)) return send(res, 401, { error: 'Unauthorized.' });
+    if (!mailReady() || !accountReady() || (process.env.RENDER && !durableStorage)) return send(res, 503, { error: 'Reminders are not configured.' });
+    if (!reminderRun) reminderRun = runReminders().finally(() => { reminderRun = null; });
+    const result = await reminderRun;
+    return send(res, result.failed ? 503 : 200, result);
+  }
   if (path === '/api/account/request-code' && req.method === 'POST') {
     if (!allowedRequestOrigin(req)) return send(res, 403, { error: 'Sign in from the Square Game page.' });
     if (!mailReady() || !accountReady() || (process.env.RENDER && !durableStorage)) return send(res, 503, { error: 'Email sign-in is not configured.' });
@@ -155,6 +169,17 @@ async function handler(req, res) {
     if (!used) return send(res, 400, { error: 'Incorrect or expired code. Request a new one if needed.' });
     codeAttempts.delete(key);
     return send(res, 200, { email, token: issueSession(email) });
+  }
+  if (path === '/api/account/turn-link' && req.method === 'POST') {
+    if (!allowedRequestOrigin(req)) return send(res, 403, { error: 'Sign in from the Square Game page.' });
+    const input = await body(req);
+    const link = readTurnLink(input.token);
+    const invalid = () => send(res, 401, { error: 'This sign-in link is invalid or expired. Sign in with an email code to open your game.' });
+    if (!link || link.room !== input.roomId) return invalid();
+    const row = await getRoom(link.room);
+    const player = row?.state.players.find(player => player.id === link.player && player.accountEmail === link.email && player.email === link.email);
+    if (!player) return invalid();
+    return send(res, 200, { email: link.email, token: issueSession(link.email), roomId: link.room, playerToken: player.token });
   }
   if (path === '/api/account/me' && req.method === 'GET') {
     const email = readSession(req.headers['x-account-token']);
