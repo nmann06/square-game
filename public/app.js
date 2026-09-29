@@ -98,7 +98,7 @@ function shuffleHeroCards() {
       await play((p, i) => [
         { transform: p.rest, zIndex: i + 1 },
         { transform: pose(p), zIndex: i + 1 }
-      ], () => ({ duration: 260, easing: 'cubic-bezier(.4,0,.2,1)' }));
+      ], () => ({ duration: 160, easing: 'cubic-bezier(.4,0,.2,1)' }));
       const split = Math.min(tiles[0].offsetWidth * .65, 70);
       await play((p, i) => [
         { transform: pose(p), zIndex: i + 1, offset: 0 },
@@ -106,7 +106,7 @@ function shuffleHeroCards() {
         { transform: pose(p, 0, -8, 4), zIndex: 4 - i, offset: .48 },
         { transform: pose(p, -p.side * split * .8, p.side * 14, -p.side * 11), zIndex: 4 - i, offset: .73 },
         { transform: pose(p), zIndex: i + 1, offset: 1 }
-      ], () => ({ duration: 620, easing: 'ease-in-out' }));
+      ], () => ({ duration: 360, easing: 'ease-in-out' }));
       cards.classList.add('is-dealing');
       // Peel off the top card first, with a little lift and an overshoot on landing.
       await play((p, i) => [
@@ -114,7 +114,7 @@ function shuffleHeroCards() {
         { transform: `translate(${p.x * .5}px, -48px) rotate(${p.side * 16}deg) scale(1.04)`, zIndex: 10 + i, offset: .38 },
         { transform: `translate(${-p.x * .06}px, 4px) ${p.rest}`, zIndex: 10 + i, offset: .8 },
         { transform: p.rest, zIndex: i + 1, offset: 1 }
-      ], i => ({ duration: 320, delay: (tiles.length - 1 - i) * 360, easing: 'cubic-bezier(.2,.65,.3,1)' }));
+      ], i => ({ duration: 175, delay: (tiles.length - 1 - i) * 200, easing: 'cubic-bezier(.2,.65,.3,1)' }));
     } finally {
       for (const animation of animations) animation.cancel();
       cards.classList.remove('is-shuffling', 'is-dealing');
@@ -517,10 +517,13 @@ document.querySelectorAll('[data-days]').forEach(button => button.addEventListen
   $('minute-label').textContent = formatTimer(timerSeconds);
   document.querySelectorAll('[data-days]').forEach(item => item.classList.toggle('active', item === button));
 }));
+$('wildcard-slider').addEventListener('input', event => {
+  $('wildcard-count').value = event.currentTarget.value;
+});
 $('create-button').addEventListener('click', async () => {
   setError('setup-error');
   try {
-    const data = await api('/api/rooms', { method: 'POST', body: JSON.stringify({ name: $('create-name').value, timerSeconds }) });
+    const data = await api('/api/rooms', { method: 'POST', body: JSON.stringify({ name: $('create-name').value, timerSeconds, wildcardCount: Number($('wildcard-slider').value) }) });
     localStorage.setItem('square-player-name', $('create-name').value.trim());
     setRoom(data, data.token);
   } catch (error) { setError('setup-error', error.message); }
@@ -575,15 +578,15 @@ $('code-request-form').addEventListener('submit', async event => {
   } catch (error) { $('account-message').textContent = ''; setError('account-error', error.message); }
   finally { button.disabled = false; }
 });
-$('play-as-guest').addEventListener('click', async () => {
+$('play-as-guest').addEventListener('click', () => {
   const button = $('play-as-guest');
   button.disabled = true;
-  await shuffleHeroCards();
   guestMode = true;
   sessionStorage.setItem('square-guest-mode', 'true');
   if (accountRoute) { location.href = basePath; return; }
   renderLanding();
-  $('create-name').focus();
+  shuffleHeroCards()?.catch(console.error);
+  $('create-name').focus({ preventScroll: true });
   button.disabled = false;
 });
 $('guest-sign-in').addEventListener('click', () => {
@@ -599,18 +602,22 @@ $('code-verify-form').addEventListener('submit', async event => {
   setError('account-error');
   try {
     const result = await api('/api/account/verify-code', { method: 'POST', body: JSON.stringify({ email: $('account-email').value, code: $('account-code').value }) });
-    await shuffleHeroCards();
     accountToken = result.token;
+    useAccount(result.email);
     guestMode = false;
     sessionStorage.removeItem('square-guest-mode');
     localStorage.setItem('square-account-token', accountToken);
     $('account-code').value = '';
     show('code-verify-form', false);
     $('account-message').textContent = '';
+    show('account-sign-in', false);
+    renderLanding();
+    shuffleHeroCards()?.catch(console.error);
+    if (!roomId && !accountRoute) $('create-name').focus({ preventScroll: true });
     await linkSavedRooms();
     await refreshAccount();
     if (roomId) await refresh();
-    else if (!accountRoute) $('create-name').focus();
+    else if (!accountRoute) $('create-name').focus({ preventScroll: true });
   } catch (error) { setError('account-error', error.message); }
   finally { button.disabled = false; }
 });

@@ -20,12 +20,13 @@ function shuffle(cards) {
   }
   return cards;
 }
-export function newDeck() {
+export function newDeck(wildcardCount = 2) {
+  if (!Number.isInteger(wildcardCount) || wildcardCount < 0 || wildcardCount > 10) fail('Choose a whole number of wildcards from 0 to 10.');
   const cards = [];
   for (const color of COLORS) for (const shape of SHAPES) for (let number = 1; number <= 4; number++) {
     cards.push({ id: token(9), color, shape, number });
   }
-  cards.push({ id: token(9), wild: true }, { id: token(9), wild: true });
+  for (let index = 0; index < wildcardCount; index++) cards.push({ id: token(9), wild: true });
   return shuffle(cards);
 }
 function draw(game, player) {
@@ -35,16 +36,16 @@ export function timerValid(seconds) {
   return Number.isInteger(seconds) && ((seconds >= 60 && seconds <= 600 && seconds % 60 === 0) || TIMER_OPTIONS.includes(seconds));
 }
 export function isDayGame(game) { return game.timerSeconds >= 86400; }
-export function createGame({ name, email, accountEmail, timerSeconds = 120, now = Date.now() }) {
+export function createGame({ name, email, accountEmail, timerSeconds = 120, wildcardCount = 2, now = Date.now() }) {
   if (!timerValid(timerSeconds)) fail('Choose a timer from 1–10 minutes or 1, 2, 3, or 7 days.');
   if (timerSeconds >= 86400 && !accountEmail) fail('Sign in to play day-length games.');
   email = accountEmail || email;
-  const deck = newDeck();
+  const deck = newDeck(wildcardCount);
   const starter = deck.pop();
   // The printed game starts with one face-up card. Give a wild starter one fixed identity.
   if (starter.wild) starter.as = { color: COLORS[randomInt(4)], shape: SHAPES[randomInt(4)], number: randomInt(1, 5) };
   const game = {
-    id: roomCode(), status: 'waiting', timerSeconds, createdAt: now,
+    id: roomCode(), status: 'waiting', timerSeconds, wildcardCount, createdAt: now,
     players: [{ id: token(9), token: token(), name: cleanName(name), email: cleanEmail(email), ...(accountEmail ? { accountEmail } : {}), hand: [], score: 0 }],
     board: { '0,0': starter }, deck, current: 0, deadline: null,
     consecutivePasses: 0, missedTurns: [0, 0], pendingSwap: null, lastMove: null, winner: null,
@@ -332,7 +333,7 @@ export function publicGame(game, index) {
   return {
     pauseRequestedBy: game.pauseRequestedBy ?? null, resumeAccepted: game.resumeAccepted ?? [],
     remainingTurnMs: game.remainingTurnMs ?? null,
-    id: game.id, status: game.status, timerSeconds: game.timerSeconds,
+    id: game.id, status: game.status, timerSeconds: game.timerSeconds, wildcardCount: game.wildcardCount,
     players: game.players.map((p, i) => ({ id: p.id, name: p.name, score: p.score, cardCount: p.hand.length, isYou: i === index })),
     board: game.board, hand: index >= 0 ? game.players[index].hand : [], deckCount: game.deck.length,
     current: game.current, deadline: game.deadline, pendingSwap: index === game.current ? game.pendingSwap : null,

@@ -4,11 +4,27 @@ import { createGame, joinGame, newDeck, playCards, swapWild, passTurn, advanceEx
 
 const c = (id, color, shape, number) => ({ id, color, shape, number });
 
-test('deck contains 64 unique regular cards and two wild cards', () => {
+test('deck defaults to 64 unique regular cards and two wild cards', () => {
   const deck = newDeck();
   assert.equal(deck.length, 66);
   assert.equal(deck.filter(card => card.wild).length, 2);
+  assert.equal(new Set(deck.map(card => card.id)).size, 66);
   assert.equal(new Set(deck.filter(card => !card.wild).map(card => `${card.color}-${card.shape}-${card.number}`)).size, 64);
+});
+
+test('room wildcard selection supports every count from zero to ten and rejects invalid counts', () => {
+  for (let wildcardCount = 0; wildcardCount <= 10; wildcardCount++) {
+    const game = joinGame(createGame({ name: 'A', wildcardCount }), { name: 'B' });
+    const cards = [...game.deck, ...Object.values(game.board), ...game.players.flatMap(player => player.hand)];
+    assert.equal(cards.length, 64 + wildcardCount);
+    assert.equal(cards.filter(card => card.wild).length, wildcardCount);
+    assert.equal(new Set(cards.map(card => card.id)).size, cards.length);
+    assert.equal(publicGame(game, 0).wildcardCount, wildcardCount);
+  }
+  for (const wildcardCount of [-1, 11, 1.5, null, '6', NaN, Infinity]) {
+    assert.throws(() => createGame({ name: 'A', wildcardCount }), /wildcards from 0 to 10/);
+  }
+  assert.equal(createGame({ name: 'A' }).wildcardCount, 2);
 });
 
 test('timer options and two-player room setup', () => {

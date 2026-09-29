@@ -80,7 +80,8 @@ body:not(.account-route) .account-identity{display:none}
 .hero-tiles{position:relative;isolation:isolate}
 .hero-tiles.is-shuffling .tile{will-change:transform;box-shadow:0 22px 34px #0005}
 .hero-tiles.is-dealing .tile{box-shadow:0 16px 28px #0004}
-.login-landing{align-items:center;max-width:1180px;margin:auto;grid-template-columns:1.15fr 1fr;gap:72px}
+html{scrollbar-gutter:stable}
+.landing{align-items:start;max-width:1180px;margin:auto;grid-template-columns:1.15fr 1fr;gap:72px}
 #landing-account{min-width:0;width:100%;max-width:460px;justify-self:end}
 #landing-account .account-panel{margin:0;padding:32px}
 #landing-account .account-panel h2{font-size:28px;letter-spacing:-.04em}
@@ -96,8 +97,8 @@ body:not(.account-route) .account-identity{display:none}
 .guest-status{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #d5dccd;padding-bottom:16px;margin-bottom:24px;color:#607362;font-size:13px}
 .guest-status button{border:0;background:none;color:#285b36;text-decoration:underline;text-underline-offset:3px;font-weight:700;padding:4px}
 .setup .fine{color:#607362}
-@media(max-width:850px){.login-landing{grid-template-columns:1fr;gap:38px;min-height:auto;max-width:540px;padding-top:32px}.login-landing .hero{text-align:center}.login-landing .hero-tiles{justify-content:center;margin-bottom:12px}#landing-account{max-width:none}.login-landing .hero h1{margin-top:0}}
-@media(max-width:530px){#landing-account .account-panel{padding:24px}.login-landing{gap:28px;padding-bottom:20px}#landing-account .account-panel h2{font-size:26px}}
+@media(max-width:850px){.landing{grid-template-columns:1fr;gap:38px;min-height:auto;max-width:540px;padding-top:32px}.landing .hero{text-align:center}.landing .hero-tiles{justify-content:center;margin-bottom:12px}#landing-account{max-width:none}.landing .hero h1{margin-top:0}.landing #hero-account{text-align:left}}
+@media(max-width:530px){#landing-account .account-panel{padding:24px}.landing{gap:28px;padding-bottom:20px}#landing-account .account-panel h2{font-size:26px}}
 /* Post-game review */
 .game-review{margin:20px 0 28px;padding:28px;border:1px solid #ffffff25;border-radius:18px;background:#192f25}
 .review-heading{display:flex;justify-content:space-between;align-items:center;gap:20px}.review-heading h2{font-size:32px;letter-spacing:-.04em;margin:0}.review-heading .eyebrow{margin:0 0 8px}.review-heading a{text-decoration:none;white-space:nowrap}

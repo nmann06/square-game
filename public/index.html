@@ -50,6 +50,8 @@
           <input id="timer-slider" type="range" min="1" max="10" step="1" value="2" aria-label="Turn timer in minutes">
           <div class="day-buttons" role="group" aria-label="Day timers"><button data-days="1">1 day</button><button data-days="2">2 days</button><button data-days="3">3 days</button><button data-days="7">7 days</button></div>
           <p id="timer-help" class="fine">Day-length games require sign-in. Turn emails go to your account address.</p>
+          <div class="timer-head"><label for="wildcard-slider">Wildcards</label><output id="wildcard-count" for="wildcard-slider">2</output></div>
+          <input id="wildcard-slider" type="range" min="0" max="10" step="1" value="2">
           <button id="create-button" class="primary wide">Create room <span>↗</span></button>
           <p id="setup-error" class="error" role="alert"></p>
           <div class="join-code">
