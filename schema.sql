@@ -54,3 +54,6 @@ create table if not exists public.square_account_profiles (
 alter table public.square_account_profiles enable row level security;
 revoke all on public.square_account_profiles from anon, authenticated;
 grant select, insert, update on public.square_account_profiles to service_role;
+
+-- Make newly created tables visible to the REST API.
+notify pgrst, 'reload schema';
