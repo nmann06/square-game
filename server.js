@@ -9,7 +9,7 @@ import {
 } from './game.js';
 import { createRoom, getRoom, updateRoom, deleteRoom, durableStorage, getLoginChallenge, saveLoginChallenge, updateLoginChallenge, verifyLoginChallenge, listAccountRooms } from './store.js';
 import { mailReady, notifyNextPlayer, sendInvite, notifyInviteAccepted, sendFeedback, sendSignInCode } from './mail.js';
-import { accountReady, accountEmail, newCode, codeHash, issueSession, readSession, readTurnLink } from './account.js';
+import { accountReady, accountEmail, newCode, codeHash, issueSession, readSession, renewSession, readTurnLink } from './account.js';
 import { runReminders } from './reminders.js';
 
 const port = Number(process.env.PORT || 10000);
@@ -22,6 +22,7 @@ const root = fileURLToPath(new URL('./public/', import.meta.url));
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/tutorial.js', ['tutorial.js', 'text/javascript; charset=utf-8']],
   ['/config.js', ['config.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']]
 ]);
@@ -184,7 +185,7 @@ async function handler(req, res) {
   if (path === '/api/account/me' && req.method === 'GET') {
     const email = readSession(req.headers['x-account-token']);
     if (!email) return send(res, 401, { error: 'Sign in to see your games.' });
-    return send(res, 200, { email, ...accountSummary(await listAccountRooms(email), email) });
+    return send(res, 200, { email, token: renewSession(req.headers['x-account-token']), ...accountSummary(await listAccountRooms(email), email) });
   }
   if (path === '/api/feedback' && req.method === 'POST') {
     if (!allowedOrigins.has(req.headers.origin)) return send(res, 403, { error: 'Feedback must be sent from the website.' });

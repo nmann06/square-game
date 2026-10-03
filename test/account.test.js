@@ -71,6 +71,8 @@ test('email code signs in once and account can reopen its room', async () => {
     const id = created.data.room.id;
     const me = await request('/api/account/me', null, token);
     assert.equal(me.data.email, email);
+    assert.equal((await request('/api/account/me', null, me.data.token)).data.email, email);
+    assert.ok(Number(me.data.token.split('.')[1]) >= Date.now() + 364 * 86400000);
     assert.equal(me.data.gamesPlayed, 0);
     assert.deepEqual(me.data.currentGames.map(game => game.id), [id]);
     const reopened = await request(`/api/rooms/${id}`, null, token);

@@ -1,9 +1,25 @@
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-const localSecret = randomBytes(32).toString('hex');
-const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+let localSecret;
+const SESSION_MS = 365 * 24 * 60 * 60 * 1000;
 
-function secret() { return process.env.ACCOUNT_SECRET?.length >= 32 ? process.env.ACCOUNT_SECRET : (process.env.RENDER ? '' : localSecret); }
+function secret() {
+  if (process.env.ACCOUNT_SECRET?.length >= 32) return process.env.ACCOUNT_SECRET;
+  if (process.env.RENDER) return '';
+  if (!localSecret) {
+    // Keep local sessions valid across restarts, just as ACCOUNT_SECRET does in production.
+    const directory = resolve('data');
+    const path = resolve(directory, 'account-secret');
+    mkdirSync(directory, { recursive: true });
+    try { writeFileSync(path, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 }); }
+    catch (error) { if (error.code !== 'EEXIST') throw error; }
+    localSecret = readFileSync(path, 'utf8').trim();
+    if (!/^[0-9a-f]{64}$/.test(localSecret)) throw new Error('The local account signing key is invalid.');
+  }
+  return localSecret;
+}
 export function accountReady() { return Boolean(secret()); }
 export function accountEmail(value) {
   const email = String(value ?? '').trim().toLowerCase();
@@ -60,4 +76,10 @@ export function readSession(token, now = Date.now()) {
     const email = Buffer.from(parts[0], 'base64url').toString('utf8');
     return accountEmail(email) === email ? email : null;
   } catch { return null; }
+}
+export function renewSession(token, now = Date.now()) {
+  const email = readSession(token, now);
+  if (!email) return null;
+  // Each successful return renews the remembered browser for another year.
+  return issueSession(email, now);
 }

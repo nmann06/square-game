@@ -271,8 +271,15 @@ async function refreshAccount() {
     renderLanding();
     return;
   }
+  const requestedToken = accountToken;
   try {
     const data = await api('/api/account/me');
+    // A response that finishes after sign-out must not restore the old session.
+    if (accountToken !== requestedToken || localStorage.getItem('square-account-token') !== requestedToken) return;
+    if (data.token) {
+      accountToken = data.token;
+      localStorage.setItem('square-account-token', accountToken);
+    }
     useAccount(data.email);
     show('account-sign-in', false); show('account-profile', true);
     show('account-history', true);
@@ -300,6 +307,7 @@ async function refreshAccount() {
       finished.append(link);
     }
   } catch (error) {
+    if (accountToken !== requestedToken || localStorage.getItem('square-account-token') !== requestedToken) return;
     if (error.status === 401) {
       localStorage.removeItem('square-account-token'); accountToken = null; signedInEmail = null;
       show('account-sign-in', true); show('account-profile', false);
