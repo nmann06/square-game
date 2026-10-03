@@ -1,5 +1,9 @@
 # Square Game
 
+Signed-in players set their display name and icon colour in the account tab. The profile is stored under the verified email address; display names do not need to be unique. The server uses the saved account name when creating or joining a room. Guests still enter a name for their room. Apply the `square_account_profiles` table in `schema.sql` before deploying this feature with Supabase; local development stores profiles in `data/account-profiles.json`.
+
+Choose **Play against a bot** in the existing room setup to start a solo game. Easy and Medium deliberately play suboptimal legal turns. Hard maximizes immediate turn score, including legal wild exchanges, without card counting or lookahead. Insane counts unseen cards using the selected wildcard count and compares strong turns through sampled opponent replies and next-turn simulations. It uses bounded search rather than guaranteed perfect play. The bot cannot read the real opponent hand or deck order. Bot games support the current pause/resume controls and game review, and use minute timers.
+
 A two-player, room-based browser card game based on the [Iota rules](https://www.ultraboardgames.com/iota/game-rules.php), with custom wild-card exchange scoring. Each player gets four cards. Place one to four cards in a single row or column, keeping each line to at most four cards. Within a line, color, shape, and number must each be either all the same or all different.
 
 ## Custom wild exchange

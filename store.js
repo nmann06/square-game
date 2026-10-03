@@ -5,6 +5,7 @@ const url = process.env.SUPABASE_URL?.replace(/\/$/, '');
 const secret = process.env.SUPABASE_SECRET_KEY;
 const localPath = resolve('data', 'rooms.json');
 const loginPath = resolve('data', 'login-codes.json');
+const profilePath = resolve('data', 'account-profiles.json');
 
 async function localRead(file = localPath) {
   try { return JSON.parse(await readFile(file, 'utf8')); }
@@ -91,6 +92,24 @@ export async function listAccountRooms(email) {
   return Object.values(await localRead()).map(row => row.state).filter(game => game.players.some(player => player.accountEmail === email));
 }
 export const durableStorage = Boolean(url && secret);
+export async function getAccountProfile(email) {
+  if (durableStorage) {
+    const rows = await remote('GET', `?email=eq.${encodeURIComponent(email)}&select=name,color`, null, 'square_account_profiles');
+    return rows[0] ?? { name: '', color: '#285b36' };
+  }
+  return (await localRead(profilePath))[email] ?? { name: '', color: '#285b36' };
+}
+let profileWrites = Promise.resolve();
+export function saveAccountProfile(email, profile) {
+  if (durableStorage) return remote('POST', '', { email, ...profile, updated_at: new Date().toISOString() }, 'square_account_profiles', 'resolution=merge-duplicates,return=representation');
+  const result = profileWrites.then(async () => {
+    const rows = await localRead(profilePath);
+    rows[email] = profile;
+    await localWrite(rows, profilePath);
+  });
+  profileWrites = result.catch(() => {});
+  return result;
+}
 export async function listActiveDayRoomIds() {
   if (durableStorage) {
     const ids = [];

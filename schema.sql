@@ -44,3 +44,13 @@ $$;
 
 revoke all on function public.square_verify_login_code(text, text, timestamptz) from public, anon, authenticated;
 grant execute on function public.square_verify_login_code(text, text, timestamptz) to service_role;
+
+create table if not exists public.square_account_profiles (
+  email text primary key,
+  name text not null check (char_length(name) between 1 and 30),
+  color text not null default '#285b36' check (color ~ '^#[0-9a-f]{6}$'),
+  updated_at timestamptz not null default now()
+);
+alter table public.square_account_profiles enable row level security;
+revoke all on public.square_account_profiles from anon, authenticated;
+grant select, insert, update on public.square_account_profiles to service_role;

@@ -1,7 +1,6 @@
 (() => {
   const dialog = document.getElementById('tutorial');
   const content = document.getElementById('tutorial-content');
-  const seenKey = 'square-tutorial-seen-v1';
   let chapter = 0;
   let returnFocus;
   const make = (tag, className, text) => {
@@ -144,7 +143,6 @@
     returnFocus = document.activeElement;
     chapter = 0; renderChapter(); dialog.showModal();
     document.body.classList.add('tutorial-open');
-    try { localStorage.setItem(seenKey, 'true'); } catch { /* Still usable without persistent storage. */ }
   }
   document.getElementById('open-tutorial').onclick = open;
   document.getElementById('close-tutorial').onclick = () => dialog.close();
@@ -152,7 +150,8 @@
   document.getElementById('tutorial-next').onclick = () => { if (chapter === chapters.length - 1) dialog.close(); else { chapter++; renderChapter(); } };
   document.querySelectorAll('[data-chapter]').forEach(button => { button.onclick = () => { chapter = Number(button.dataset.chapter); renderChapter(); }; });
   dialog.addEventListener('close', () => { document.body.classList.remove('tutorial-open'); if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true }); });
-  let seen = false;
-  try { seen = localStorage.getItem(seenKey) === 'true'; } catch { /* Show the first-open help if storage is unavailable. */ }
-  if (!seen) open();
+  if (sessionStorage.getItem('square-guest-tutorial-pending') === 'true') {
+    sessionStorage.removeItem('square-guest-tutorial-pending');
+    open();
+  }
 })();

@@ -27,6 +27,13 @@ export function accountEmail(value) {
   return email;
 }
 export function newCode() { return String(randomInt(1000000)).padStart(6, '0'); }
+export function accountProfile(input) {
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  if (!name || name.length > 30 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error('Choose an account name between 1 and 30 characters.');
+  const color = typeof input.color === 'string' ? input.color.toLowerCase() : '';
+  if (!/^#[0-9a-f]{6}$/.test(color)) throw new Error('Choose a valid icon colour.');
+  return { name, color };
+}
 export function codeHash(email, code) {
   return createHmac('sha256', secret()).update(`square-code:${email}:${code}`).digest('hex');
 }

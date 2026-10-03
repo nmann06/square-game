@@ -11,6 +11,10 @@ import { createRoom, getRoom, updateRoom, deleteRoom, durableStorage, getLoginCh
 import { mailReady, notifyNextPlayer, sendInvite, notifyInviteAccepted, sendFeedback, sendSignInCode } from './mail.js';
 import { accountReady, accountEmail, newCode, codeHash, issueSession, readSession, renewSession, readTurnLink } from './account.js';
 import { runReminders } from './reminders.js';
+import { createAiGame } from './ai.js';
+import { runAi } from './ai-runner.js';
+import { getAccountProfile, saveAccountProfile } from './store.js';
+import { accountProfile } from './account.js';
 
 const port = Number(process.env.PORT || 10000);
 const basePath = '/square-game';
@@ -68,17 +72,25 @@ function auth(req, game) {
   return email ? game.players.findIndex(player => player.accountEmail === email) : -1;
 }
 function requestIp(req) { return String(req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0].trim(); }
+const botInFlight = new Map();
 async function loadFresh(id) {
+  if (botInFlight.has(id)) return botInFlight.get(id);
+  const task = refreshRoom(id);
+  botInFlight.set(id, task);
+  try { return await task; } finally { botInFlight.delete(id); }
+}
+async function refreshRoom(id) {
   const row = await getRoom(id);
   if (!row) return null;
-  const advanced = advanceExpired(row.state);
+  const advanced = await runAi(advanceExpired(row.state));
   if (JSON.stringify(advanced) !== JSON.stringify(row.state)) {
-    if (!(await updateRoom(id, row.version, advanced))) return loadFresh(id);
+    if (!(await updateRoom(id, row.version, advanced))) return refreshRoom(id);
     return { state: advanced, version: row.version + 1 };
   }
   return row;
 }
 async function sendNotification(game) {
+  if (game.mode === 'ai') return true;
   try { await notifyNextPlayer(game); return true; }
   catch (error) { console.error(error); return false; }
 }
@@ -185,7 +197,16 @@ async function handler(req, res) {
   if (path === '/api/account/me' && req.method === 'GET') {
     const email = readSession(req.headers['x-account-token']);
     if (!email) return send(res, 401, { error: 'Sign in to see your games.' });
-    return send(res, 200, { email, token: renewSession(req.headers['x-account-token']), ...accountSummary(await listAccountRooms(email), email) });
+    const [profile, games] = await Promise.all([getAccountProfile(email), listAccountRooms(email)]);
+    return send(res, 200, { email, profile, token: renewSession(req.headers['x-account-token']), ...accountSummary(games, email) });
+  }
+  if (path === '/api/account/profile' && req.method === 'POST') {
+    const email = readSession(req.headers['x-account-token']);
+    if (!email) return send(res, 401, { error: 'Sign in to edit your account.' });
+    if (!allowedRequestOrigin(req)) return send(res, 403, { error: 'Edit your account from the Square Game page.' });
+    const profile = accountProfile(await body(req));
+    await saveAccountProfile(email, profile);
+    return send(res, 200, { email, profile });
   }
   if (path === '/api/feedback' && req.method === 'POST') {
     if (!allowedOrigins.has(req.headers.origin)) return send(res, 403, { error: 'Feedback must be sent from the website.' });
@@ -208,12 +229,16 @@ async function handler(req, res) {
   }
   if (path === '/api/rooms' && req.method === 'POST') {
     const input = await body(req);
+    if (input.mode && !['friend', 'ai'].includes(input.mode)) throw new Error('Unknown game mode.');
     const verifiedEmail = readSession(req.headers['x-account-token']);
     if (Number(input.timerSeconds) >= 86400 && !verifiedEmail) return send(res, 401, { error: 'Sign in to play day-length games.' });
     if (Number(input.timerSeconds) >= 86400 && (!durableStorage || !mailReady())) {
       return send(res, 503, { error: 'Day-length games require Supabase storage and Resend email configuration.' });
     }
-    const game = createGame({ ...input, accountEmail: verifiedEmail ?? undefined, email: verifiedEmail ?? '', timerSeconds: Number(input.timerSeconds ?? 120) });
+    const create = input.mode === 'ai' ? createAiGame : createGame;
+    const profile = verifiedEmail ? await getAccountProfile(verifiedEmail) : null;
+    if (profile && !profile.name) return send(res, 400, { error: 'Set your name in the account tab before creating a room.' });
+    const game = create({ ...input, name: profile?.name ?? input.name, accountEmail: verifiedEmail ?? undefined, email: verifiedEmail ?? '', timerSeconds: Number(input.timerSeconds ?? 120) });
     let created = false;
     for (let attempt = 0; attempt < 20 && !created; attempt++) {
       if (attempt) game.id = roomCode();
@@ -262,7 +287,9 @@ async function handler(req, res) {
     const input = await body(req);
     const verifiedEmail = readSession(req.headers['x-account-token']);
     if (isDayGame(game) && !verifiedEmail) return send(res, 401, { error: 'Sign in to play day-length games.' });
-    const next = joinGame(game, { ...input, accountEmail: verifiedEmail ?? undefined, email: verifiedEmail ?? input.email });
+    const profile = verifiedEmail ? await getAccountProfile(verifiedEmail) : null;
+    if (profile && !profile.name) return send(res, 400, { error: 'Set your name in the account tab before joining a room.' });
+    const next = joinGame(game, { ...input, name: profile?.name ?? input.name, accountEmail: verifiedEmail ?? undefined, email: verifiedEmail ?? input.email });
     if (!(await updateRoom(id, row.version, next))) return send(res, 409, { error: 'Room changed. Please retry.' });
     if (next.invites?.length) {
       try { await notifyInviteAccepted(next); }
@@ -290,9 +317,12 @@ async function handler(req, res) {
     else if (input.type === 'pass') next = passTurn(game, index, input.tradeIds ?? []);
     else if (['request-pause', 'accept-pause', 'cancel-pause', 'resume'].includes(input.type)) next = changePause(game, index, input.type);
     else throw new Error('Unknown action.');
+    if (game.mode === 'ai' && input.type === 'request-pause') next = changePause(next, 1 - index, 'accept-pause');
+    if (game.mode === 'ai' && input.type === 'resume' && next.status === 'paused') next = changePause(next, 1 - index, 'resume');
     if (!(await updateRoom(id, row.version, next))) return send(res, 409, { error: 'Room changed. Please retry.' });
     const notified = ['play', 'pass'].includes(input.type) || (input.type === 'resume' && next.status === 'playing') ? await sendNotification(next) : null;
-    return send(res, 200, { room: publicGame(next, index), notificationSent: notified });
+    const settled = next.mode === 'ai' && next.status === 'playing' && input.type !== 'swap' ? (await loadFresh(id)).state : next;
+    return send(res, 200, { room: publicGame(settled, index), notificationSent: notified });
   }
   return send(res, 405, { error: 'Method not allowed.' });
 }

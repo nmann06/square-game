@@ -154,9 +154,11 @@ export function validateBoard(board) {
   const lines = boardLines(board);
   if (lines.some(line => line.cells.length > 4)) fail('That makes an invalid line or a line longer than four.');
   const wilds = Object.values(board).filter(card => card.wild);
+  if (lines.some(line => line.cells.every(cell => !cell.card.wild) && !validLine(line.cells.map(cell => cell.card)))) fail('That makes an invalid line or a line longer than four.');
   const choices = [];
   for (const color of COLORS) for (const shape of SHAPES) for (let number = 1; number <= 4; number++) choices.push({ color, shape, number });
   const original = wilds.map(card => card.as);
+  const incident = wilds.map(wild => lines.filter(line => line.cells.some(cell => cell.card === wild)));
   const legal = () => lines.every(line => validLine(line.cells.map(cell => cell.card)));
   function assign(index) {
     if (index === wilds.length) return legal();
@@ -164,7 +166,8 @@ export function validateBoard(board) {
     const candidates = preferred ? [preferred, ...choices.filter(choice => choice.color !== preferred.color || choice.shape !== preferred.shape || choice.number !== preferred.number)] : choices;
     for (const choice of candidates) {
       wilds[index].as = choice;
-      if (assign(index + 1)) return true;
+      const consistent = incident[index].every(line => validLine(line.cells.filter(cell => !cell.card.wild || wilds.indexOf(cell.card) <= index).map(cell => cell.card)));
+      if (consistent && assign(index + 1)) return true;
     }
     return false;
   }
@@ -174,7 +177,7 @@ export function validateBoard(board) {
   }
   return lines;
 }
-function scoreLines(lines, changed) {
+export function scoreLines(lines, changed) {
   const affected = lines.filter(line => line.cells.some(cell => changed.has(cell.spot)));
   return {
     base: affected.reduce((sum, line) => sum + line.cells.reduce((n, cell) => n + (cell.card.wild ? 0 : cell.card.number), 0), 0),
@@ -341,6 +344,7 @@ export function publicGame(game, index) {
     pauseRequestedBy: game.pauseRequestedBy ?? null, resumeAccepted: game.resumeAccepted ?? [],
     remainingTurnMs: game.remainingTurnMs ?? null,
     id: game.id, status: game.status, timerSeconds: game.timerSeconds, wildcardCount: game.wildcardCount,
+    mode: game.mode ?? 'friend', difficulty: game.difficulty ?? null,
     players: game.players.map((p, i) => ({ id: p.id, name: p.name, score: p.score, cardCount: p.hand.length, isYou: i === index })),
     board: game.board, hand: index >= 0 ? game.players[index].hand : [], deckCount: game.deck.length,
     current: game.current, deadline: game.deadline, pendingSwap: index === game.current ? game.pendingSwap : null,

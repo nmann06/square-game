@@ -66,6 +66,7 @@ test('email code signs in once and account can reopen its room', async () => {
     assert.equal(verified.status, 200);
     assert.equal((await request('/api/account/verify-code', { email, code })).status, 400);
     const token = verified.data.token;
+    assert.equal((await request('/api/account/profile', { name: 'Player', color: '#285b36' }, token)).status, 200);
     const created = await request('/api/rooms', { name: 'Player', email: 'unverified@example.com', timerSeconds: 60 }, token);
     assert.equal(created.status, 201);
     const id = created.data.room.id;

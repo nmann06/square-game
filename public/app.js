@@ -13,6 +13,7 @@ let roomId = location.pathname.match(/^\/square-game\/room\/([\w-]+)$/)?.[1] ?? 
 let playerToken = null;
 let accountToken = localStorage.getItem('square-account-token');
 let signedInEmail = null;
+let savedProfile = { name: '', color: '#285b36' };
 let guestMode = sessionStorage.getItem('square-guest-mode') === 'true';
 let selected = null;
 let staged = [];
@@ -20,6 +21,7 @@ let previewStatus = { status: 'empty', message: 'Place tiles to preview your sco
 let previewRevision = 0;
 let tradeIds = new Set();
 let timerSeconds = 120;
+let gameMode = 'friend';
 let busy = false;
 let reviewTurn = null;
 let reviewRoomId = null;
@@ -123,6 +125,7 @@ function shuffleHeroCards() {
   return heroShuffle;
 }
 function renderLanding() {
+  renderAccountAppearance();
   if (accountRoute || roomId) return;
   const signedIn = Boolean(signedInEmail);
   const canSetUp = signedIn || guestMode;
@@ -132,7 +135,6 @@ function renderLanding() {
   show('account-panel', signedIn || !guestMode);
   show('room-setup', canSetUp);
   show('guest-status', guestMode && !signedIn);
-  show('header-account', signedIn);
   $('landing').classList.toggle('login-landing', !canSetUp);
 }
 function render() {
@@ -140,12 +142,13 @@ function render() {
   show('landing', !roomId && !accountRoute);
   show('account-page', !roomId && accountRoute);
   show('room', Boolean(roomId));
-  show('header-account', Boolean(roomId));
+  renderAccountAppearance();
   renderLanding();
   if (!room) return;
   $('room-code').textContent = room.id;
   $('room-heading').textContent = room.status === 'waiting' ? 'Waiting for a friend' : room.status === 'finished' ? 'Game complete' : room.status === 'paused' ? 'Game paused' : currentIsYou() ? 'Your move' : `${room.players[room.current]?.name}'s move`;
-  $('room-subtitle').textContent = `${formatTimer(room.timerSeconds)} per turn · ${room.players.length}/2 players`;
+  $('room-subtitle').textContent = `${formatTimer(room.timerSeconds)} per turn · ${room.mode === 'ai' ? `${room.difficulty[0].toUpperCase()}${room.difficulty.slice(1)} bot` : `${room.players.length}/2 players`}`;
+  show('copy-link', room.mode !== 'ai');
   show('join-panel', room.status === 'waiting' && !room.players.some(p => p.isYou));
   show('waiting-panel', room.status === 'waiting' && room.players.some(p => p.isYou));
   show('invite-panel', room.status === 'waiting' && Boolean(room.invites));
@@ -155,7 +158,7 @@ function render() {
   }
   show('delete-room', room.status === 'waiting' && room.players.length === 1 && room.players[0].isYou);
   show('room-sign-in', room.timerSeconds >= 86400 && !room.players.some(p => p.isYou));
-  $('join-button').disabled = room.timerSeconds >= 86400 && !accountToken;
+  $('join-button').disabled = (room.timerSeconds >= 86400 && !accountToken) || (Boolean(signedInEmail) && !savedProfile.name);
   renderPauseControls();
   show('game-panel', room.status !== 'waiting');
   if (room.status === 'waiting') return;
@@ -255,14 +258,44 @@ function renderReview() {
   }
   table.append(body); scroll.append(table); log.append(scroll); parent.append(log);
 }
-function useAccount(email) {
+function avatarStyle(node, name, color) {
+  node.textContent = Array.from(name.trim())[0]?.toLocaleUpperCase() ?? '?';
+  node.style.backgroundColor = color;
+  const rgb = color.slice(1).match(/../g).map(value => parseInt(value, 16));
+  node.style.color = (.299*rgb[0] + .587*rgb[1] + .114*rgb[2]) > 155 ? '#183125' : '#fff';
+}
+function renderProfilePreview() {
+  avatarStyle($('profile-avatar'), $('profile-name').value, $('profile-color').value);
+}
+function renderAccountAppearance() {
+  show('header-account', true);
+  const signedIn = Boolean(signedInEmail);
+  show('account-default-icon', !signedIn);
+  show('account-initial', signedIn);
+  $('header-account').classList.toggle('has-profile', signedIn);
+  if (signedIn) {
+    avatarStyle($('account-initial'), savedProfile.name, savedProfile.color);
+    $('header-account').setAttribute('aria-label', savedProfile.name ? `${savedProfile.name}'s account` : 'Set up your account');
+  } else $('header-account').setAttribute('aria-label', 'Account');
+  show('create-name-field', !signedIn); show('join-name-field', !signedIn);
+  show('profile-required', signedIn && !savedProfile.name);
+  $('create-button').disabled = busy || (signedIn && !savedProfile.name);
+  if (room) $('join-button').disabled = busy || (room.timerSeconds >= 86400 && !accountToken) || (signedIn && !savedProfile.name);
+}
+function useAccount(email, profile) {
+  if (signedInEmail !== email) savedProfile = { name: '', color: '#285b36' };
   signedInEmail = email;
+  if (profile) {
+    savedProfile = profile;
+    $('profile-name').value = profile.name;
+    $('profile-color').value = profile.color;
+    renderProfilePreview();
+  }
   for (const id of ['host-email']) {
     $(id).value = email;
     $(id).readOnly = true;
   }
-  const savedName = localStorage.getItem('square-player-name');
-  if (savedName) for (const id of ['create-name', 'join-name']) if (!$(id).value) $(id).value = savedName;
+  renderAccountAppearance();
 }
 async function refreshAccount() {
   if (!accountToken) {
@@ -280,7 +313,7 @@ async function refreshAccount() {
       accountToken = data.token;
       localStorage.setItem('square-account-token', accountToken);
     }
-    useAccount(data.email);
+    useAccount(data.email, data.profile);
     show('account-sign-in', false); show('account-profile', true);
     show('account-history', true);
     $('account-identity').textContent = data.email;
@@ -317,6 +350,20 @@ async function refreshAccount() {
   }
   renderLanding();
 }
+for (const id of ['profile-name', 'profile-color']) $(id).addEventListener('input', renderProfilePreview);
+$('profile-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const requestedToken = accountToken;
+  $('profile-save').disabled = true;
+  setError('profile-error'); $('profile-message').textContent = '';
+  try {
+    const result = await api('/api/account/profile', { method: 'POST', body: JSON.stringify({ name: $('profile-name').value, color: $('profile-color').value }) });
+    if (accountToken !== requestedToken || localStorage.getItem('square-account-token') !== requestedToken) return;
+    useAccount(result.email, result.profile);
+    $('profile-message').textContent = 'Account saved. Your name will be used in new games.';
+  } catch (error) { setError('profile-error', error.message); }
+  finally { $('profile-save').disabled = false; }
+});
 async function linkSavedRooms() {
   if (!accountToken) return;
   const saved = [];
@@ -437,6 +484,7 @@ async function updatePreview() {
   renderBoard();
 }
 function renderControls() {
+  renderAccountAppearance();
   if (room) renderPauseControls();
   const canAct = room?.status === 'playing' && currentIsYou() && !busy;
   $('play-button').disabled = !canAct || previewStatus.status !== 'legal';
@@ -468,7 +516,8 @@ function renderPauseControls() {
   $('pause-status').textContent = room.status === 'paused'
     ? accepted ? 'Waiting for your opponent to resume.' : 'Game paused. Both players must agree to resume.'
     : requested ? mine ? 'Pause requested. The timer runs until your opponent accepts.' : 'Your opponent requested a pause. The timer is still running.' : '';
-  $('pause-button').textContent = room.status === 'paused' ? 'Agree to resume' : requested ? mine ? 'Pause requested' : 'Accept pause' : 'Request pause';
+  if (room.mode === 'ai' && room.status === 'paused') $('pause-status').textContent = 'Game paused. Resume when you are ready.';
+  $('pause-button').textContent = room.status === 'paused' ? room.mode === 'ai' ? 'Resume game' : 'Agree to resume' : requested ? mine ? 'Pause requested' : 'Accept pause' : room.mode === 'ai' ? 'Pause game' : 'Request pause';
   $('pause-button').disabled = busy || (room.status === 'paused' ? accepted : requested && mine);
   show('cancel-pause', room.status === 'playing' && requested);
   $('cancel-pause').textContent = mine ? 'Cancel request' : 'Decline pause';
@@ -489,6 +538,7 @@ $('delete-room').addEventListener('click', async () => {
 async function act(input) {
   if (busy) return;
   busy = true; renderControls(); setError('room-error');
+  if (room.mode === 'ai' && ['play', 'pass'].includes(input.type)) $('room-heading').textContent = 'Bot is thinking…';
   try {
     const data = await api(`/api/rooms/${roomId}/action`, { method: 'POST', body: JSON.stringify(input) });
     if (input.type !== 'swap') { staged = []; tradeIds.clear(); $('trade-mode').checked = false; }
@@ -498,7 +548,7 @@ async function act(input) {
   } catch (error) {
     setError('room-error', error.message);
     await refresh();
-  } finally { busy = false; renderControls(); }
+  } finally { busy = false; render(); }
 }
 function updateCountdown() {
   if (!room || room.status === 'waiting') return;
@@ -528,19 +578,41 @@ document.querySelectorAll('[data-days]').forEach(button => button.addEventListen
 $('wildcard-slider').addEventListener('input', event => {
   $('wildcard-count').value = event.currentTarget.value;
 });
+function renderBotSetup() {
+  const bot = gameMode === 'ai';
+  document.querySelectorAll('[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === gameMode)));
+  show('bot-options', bot);
+  document.querySelector('.day-buttons').classList.toggle('hidden', bot);
+  if (bot && timerSeconds >= 86400) {
+    timerSeconds = Number($('timer-slider').value) * 60;
+    $('minute-label').textContent = formatTimer(timerSeconds);
+    document.querySelectorAll('[data-days]').forEach(button => button.classList.remove('active'));
+  }
+  $('timer-help').textContent = bot ? 'Choose a minute timer for your turns.' : 'Day-length games require sign-in. Turn emails go to your account address.';
+  $('create-button').textContent = bot ? 'Play against a bot ↗' : 'Create room ↗';
+}
+document.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', () => {
+  gameMode = button.dataset.mode;
+  renderBotSetup();
+}));
+$('bot-difficulty').addEventListener('change', renderBotSetup);
+renderBotSetup();
 $('create-button').addEventListener('click', async () => {
+  if (busy) return;
+  busy = true; $('create-button').disabled = true;
   setError('setup-error');
   try {
-    const data = await api('/api/rooms', { method: 'POST', body: JSON.stringify({ name: $('create-name').value, timerSeconds, wildcardCount: Number($('wildcard-slider').value) }) });
-    localStorage.setItem('square-player-name', $('create-name').value.trim());
+    const data = await api('/api/rooms', { method: 'POST', body: JSON.stringify({ name: $('create-name').value, timerSeconds, wildcardCount: Number($('wildcard-slider').value), mode: gameMode, difficulty: $('bot-difficulty').value }) });
+    if (!signedInEmail) localStorage.setItem('square-player-name', $('create-name').value.trim());
     setRoom(data, data.token);
   } catch (error) { setError('setup-error', error.message); }
+  finally { busy = false; $('create-button').disabled = false; renderControls(); }
 });
 $('join-button').addEventListener('click', async () => {
   setError('room-error');
   try {
     const data = await api(`/api/rooms/${roomId}/join`, { method: 'POST', body: JSON.stringify({ name: $('join-name').value }) });
-    localStorage.setItem('square-player-name', $('join-name').value.trim());
+    if (!signedInEmail) localStorage.setItem('square-player-name', $('join-name').value.trim());
     setRoom(data, data.token);
   } catch (error) { setError('room-error', error.message); }
 });
@@ -591,11 +663,16 @@ $('play-as-guest').addEventListener('click', () => {
   button.disabled = true;
   guestMode = true;
   sessionStorage.setItem('square-guest-mode', 'true');
-  if (accountRoute) { location.href = basePath; return; }
+  if (accountRoute) {
+    sessionStorage.setItem('square-guest-tutorial-pending', 'true');
+    location.href = basePath;
+    return;
+  }
   renderLanding();
   shuffleHeroCards()?.catch(console.error);
   $('create-name').focus({ preventScroll: true });
   button.disabled = false;
+  $('open-tutorial').click();
 });
 $('guest-sign-in').addEventListener('click', () => {
   guestMode = false;
@@ -621,17 +698,18 @@ $('code-verify-form').addEventListener('submit', async event => {
     show('account-sign-in', false);
     renderLanding();
     shuffleHeroCards()?.catch(console.error);
-    if (!roomId && !accountRoute) $('create-name').focus({ preventScroll: true });
+    if (!roomId && !accountRoute) $('header-account').focus({ preventScroll: true });
     await linkSavedRooms();
     await refreshAccount();
     if (roomId) await refresh();
-    else if (!accountRoute) $('create-name').focus({ preventScroll: true });
+    else if (!accountRoute) $('header-account').focus({ preventScroll: true });
   } catch (error) { setError('account-error', error.message); }
   finally { button.disabled = false; }
 });
 $('account-sign-out').addEventListener('click', () => {
   const email = signedInEmail;
   localStorage.removeItem('square-account-token'); accountToken = null; signedInEmail = null;
+  savedProfile = { name: '', color: '#285b36' };
   guestMode = false;
   sessionStorage.removeItem('square-guest-mode');
   for (const id of ['host-email']) {
