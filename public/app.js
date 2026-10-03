@@ -129,6 +129,8 @@ function renderLanding() {
   if (accountRoute || roomId) return;
   const signedIn = Boolean(signedInEmail);
   const canSetUp = signedIn || guestMode;
+  const tutorialDestination = $(canSetUp ? 'setup-tutorial-slot' : 'account-sign-in');
+  if ($('tutorial-launcher').parentElement !== tutorialDestination) tutorialDestination.append($('tutorial-launcher'));
   const destination = $(signedIn ? 'hero-account' : 'landing-account');
   if ($('account-panel').parentElement !== destination) destination.append($('account-panel'));
   show('landing-account', !canSetUp);

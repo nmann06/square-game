@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#14271f">
   <title>Square Game</title>
-  <link rel="stylesheet" href="/square-game/styles.css?v=account-profile-1">
+  <link rel="stylesheet" href="/square-game/styles.css?v=tutorial-launcher-1">
   <script src="/square-game/config.js"></script>
-  <script src="/square-game/app.js?v=guest-tutorial-1" defer></script>
+  <script src="/square-game/app.js?v=tutorial-launcher-1" defer></script>
   <script src="/square-game/tutorial.js?v=guest-tutorial-1" defer></script>
 </head>
 <body>
@@ -35,6 +35,7 @@
               <p id="account-message" class="fine" role="status" aria-live="polite"></p>
               <p id="account-error" class="error" role="alert"></p>
               <div class="guest-option"><span>or</span><button id="play-as-guest" class="secondary wide" type="button">Play as guest <span aria-hidden="true">↗</span></button><p class="fine">Jump into a quick game. Sign in for day-length turns and game history.</p></div>
+              <div id="tutorial-launcher" class="setup-footer"><button id="open-tutorial" class="secondary" type="button">How to play</button></div>
             </div>
             <div id="account-profile" class="hidden">
               <div class="account-heading"><div><p class="eyebrow">YOUR SQUARE GAME ACCOUNT</p><h2>Your account</h2><p id="account-identity" class="account-identity"></p></div><button id="account-sign-out" class="account-sign-out" type="button">Sign out</button></div>
@@ -72,7 +73,7 @@
             <div class="code-row"><input id="join-code-input" maxlength="4" inputmode="numeric" placeholder="1234" autocomplete="off"><button id="join-code-button" class="secondary">Join room</button></div>
             <p id="join-code-error" class="error" role="alert"></p>
           </div>
-          <div class="setup-footer"><button id="open-tutorial" class="secondary" type="button">How to play</button></div>
+          <div id="setup-tutorial-slot"></div>
         </div>
       </section>
 
