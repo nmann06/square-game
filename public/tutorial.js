@@ -145,6 +145,7 @@
     document.body.classList.add('tutorial-open');
   }
   document.getElementById('open-tutorial').onclick = open;
+  document.getElementById('room-tutorial').onclick = open;
   document.getElementById('close-tutorial').onclick = () => dialog.close();
   document.getElementById('tutorial-back').onclick = () => { if (chapter > 0) { chapter--; renderChapter(); } };
   document.getElementById('tutorial-next').onclick = () => { if (chapter === chapters.length - 1) dialog.close(); else { chapter++; renderChapter(); } };
