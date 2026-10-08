@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#14271f">
   <title>Square Game</title>
-  <link rel="stylesheet" href="/square-game/styles.css?v=tutorial-launcher-1">
+  <link rel="stylesheet" href="/square-game/styles.css?v=signin-loading-1">
+  <script>try { if (localStorage.getItem('square-account-token')) document.documentElement.classList.add('account-restoring'); } catch {}</script>
   <script src="/square-game/config.js"></script>
-  <script src="/square-game/app.js?v=tutorial-launcher-1" defer></script>
-  <script src="/square-game/tutorial.js?v=guest-tutorial-1" defer></script>
+  <script src="/square-game/app.js?v=signin-loading-1" defer></script>
+  <script src="/square-game/tutorial.js?v=room-tutorial-1" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -27,6 +28,7 @@
         <div id="landing-account">
           <section id="account-panel" class="account-panel card-panel">
             <div id="account-sign-in">
+              <div class="account-loading" role="status"><span class="account-spinner" aria-hidden="true"></span>Signing you in…</div>
               <p class="eyebrow">LET’S PLAY</p>
               <h2>Sign in to Square Game</h2>
               <p>Save your progress and pick up where you left off. We’ll email you a sign-in code. No password needed.</p>

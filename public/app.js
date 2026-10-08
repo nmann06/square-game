@@ -299,20 +299,17 @@ function useAccount(email, profile) {
   }
   renderAccountAppearance();
 }
+// index.html marks a remembered session before first paint so the email form never flashes.
+function doneRestoringAccount() { document.documentElement.classList.remove('account-restoring'); }
 async function refreshAccount() {
   if (!accountToken) {
+    doneRestoringAccount();
     show('account-sign-in', true); show('account-profile', false);
     show('account-history', false);
     renderLanding();
     return;
   }
   const requestedToken = accountToken;
-  // Hold the email form back while a remembered session loads; a cold server can take a while.
-  const restoring = !signedInEmail;
-  if (restoring) {
-    show('code-request-form', false); show('code-verify-form', false);
-    $('account-message').textContent = 'Signing you in…';
-  }
   try {
     const data = await api('/api/account/me');
     // A response that finishes after sign-out must not restore the old session.
@@ -356,10 +353,7 @@ async function refreshAccount() {
       $('account-error').textContent = 'Your sign-in expired. Request a new code.';
     } else $('account-error').textContent = error.message;
   } finally {
-    if (restoring) {
-      show('code-request-form', true);
-      if ($('account-message').textContent === 'Signing you in…') $('account-message').textContent = '';
-    }
+    doneRestoringAccount();
   }
   renderLanding();
 }
