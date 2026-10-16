@@ -13,11 +13,14 @@ let roomId = location.pathname.match(/^\/square-game\/room\/([\w-]+)$/)?.[1] ?? 
 let playerToken = null;
 let accountToken = localStorage.getItem('square-account-token');
 let signedInEmail = null;
-let savedProfile = { name: '', color: '#285b36' };
+const blankProfile = () => ({ name: '', color: '#285b36', language: 'en', tileColors: null });
+let savedProfile = blankProfile();
+let accountData = null;
+let editingAccount = false;
 let guestMode = sessionStorage.getItem('square-guest-mode') === 'true';
 let selected = null;
 let staged = [];
-let previewStatus = { status: 'empty', message: 'Place tiles to preview your score.' };
+let previewStatus = { status: 'empty' };
 let previewRevision = 0;
 let tradeIds = new Set();
 let timerSeconds = 120;
@@ -40,8 +43,12 @@ function cardElement(card, selectedCard = false, preview = false, recent = false
   const face = card.wild ? (card.as ? symbols[card.as.shape] : '✳') : symbols[card.shape];
   node.append(element('span', '', face));
   if (!card.wild) node.append(element('small', '', String(card.number)));
-  node.title = card.wild ? 'Wild card' + (card.as ? ` (${card.as.color} ${card.as.shape} ${card.as.number})` : '') : `${card.color} ${card.shape} ${card.number}`;
+  node.title = describeCard(card);
   return node;
+}
+function describeCard(card) {
+  if (!card.wild) return SquareI18n.cardName(card);
+  return card.as ? t('card.wildAs', { card: SquareI18n.cardName(card.as) }) : t('card.wild');
 }
 async function api(path, options = {}) {
   if (!window.SQUARE_GAME_API_ORIGIN && /^\/?(?:www\.)?nathanielmann\.ca$/i.test(location.hostname)) {
@@ -55,7 +62,7 @@ async function api(path, options = {}) {
   let data;
   try { data = JSON.parse(raw); }
   catch { throw new Error(`Game server returned ${raw ? 'a non-JSON response' : 'an empty response'} (HTTP ${response.status}). Check GAME_API_ORIGIN and the game service logs.`); }
-  if (!response.ok) { const error = new Error(data.error || 'Request failed.'); error.status = response.status; throw error; }
+  if (!response.ok) { const error = new Error(SquareI18n.serverMessage(data.error || 'Request failed.')); error.status = response.status; throw error; }
   return data;
 }
 function setRoom(data, newToken) {
@@ -69,8 +76,8 @@ function setRoom(data, newToken) {
   render();
 }
 function formatTimer(seconds) {
-  if (seconds < 86400) return `${seconds / 60} minute${seconds === 60 ? '' : 's'}`;
-  return `${seconds / 86400} day${seconds === 86400 ? '' : 's'}`;
+  if (seconds < 86400) return t('time.minutes', { n: seconds / 60 });
+  return t('time.days', { n: seconds / 86400 });
 }
 function currentIsYou() { return room?.players[room.current]?.isYou; }
 let heroShuffle = null;
@@ -148,15 +155,15 @@ function render() {
   renderLanding();
   if (!room) return;
   $('room-code').textContent = room.id;
-  $('room-heading').textContent = room.status === 'waiting' ? 'Waiting for a friend' : room.status === 'finished' ? 'Game complete' : room.status === 'paused' ? 'Game paused' : currentIsYou() ? 'Your move' : `${room.players[room.current]?.name}'s move`;
-  $('room-subtitle').textContent = `${formatTimer(room.timerSeconds)} per turn · ${room.mode === 'ai' ? `${room.difficulty[0].toUpperCase()}${room.difficulty.slice(1)} bot` : `${room.players.length}/2 players`}`;
+  $('room-heading').textContent = room.status === 'waiting' ? t('room.waiting') : room.status === 'finished' ? t('room.complete') : room.status === 'paused' ? t('room.paused') : currentIsYou() ? t('room.yourMove') : t('room.theirMove', { name: room.players[room.current]?.name });
+  $('room-subtitle').textContent = `${t('room.perTurn', { timer: formatTimer(room.timerSeconds) })} · ${room.mode === 'ai' ? t('room.bot', { difficulty: t(`difficulty.${room.difficulty}`) }) : t('room.players', { n: room.players.length })}`;
   show('copy-link', room.mode !== 'ai');
   show('join-panel', room.status === 'waiting' && !room.players.some(p => p.isYou));
   show('waiting-panel', room.status === 'waiting' && room.players.some(p => p.isYou));
   show('invite-panel', room.status === 'waiting' && Boolean(room.invites));
   if (room.invites) {
     show('host-email-field', !room.hostHasEmail);
-    $('invite-status').textContent = room.invites.length ? `Invite sent to ${room.invites.join(', ')}. We'll email you when they accept.` : '';
+    $('invite-status').textContent = room.invites.length ? t('room.inviteSent', { emails: room.invites }) : '';
   }
   show('delete-room', room.status === 'waiting' && room.players.length === 1 && room.players[0].isYou);
   show('room-sign-in', room.timerSeconds >= 86400 && !room.players.some(p => p.isYou));
@@ -180,51 +187,52 @@ function renderReview() {
   parent.replaceChildren();
   const heading = element('div', 'review-heading');
   const title = element('div');
-  title.append(element('p', 'eyebrow', 'POST-GAME ANALYSIS'));
-  const h2 = element('h2', '', 'Game review'); h2.id = 'review-heading'; title.append(h2);
+  title.append(element('p', 'eyebrow', t('review.eyebrow')));
+  const h2 = element('h2', '', t('review.title')); h2.id = 'review-heading'; title.append(h2);
   const winner = room.players.find(player => player.id === room.winner);
-  title.append(element('p', 'fine', room.finishReason === 'missed-turns' ? 'Draw · game ended after missed turns' : winner ? `${winner.name} wins · ${room.players.map(p => p.score).join(' – ')}` : 'Draw · equal scores'));
-  const again = element('a', 'secondary', 'New game ↗'); again.href = basePath;
+  title.append(element('p', 'fine', room.finishReason === 'missed-turns' ? t('review.drawMissed') : winner ? t('review.winner', { name: winner.name, scores: room.players.map(p => p.score).join(' – ') }) : t('review.drawEqual')));
+  const again = element('a', 'secondary', t('review.newGame')); again.href = basePath;
   heading.append(title, again); parent.append(heading);
   const review = room.review;
-  if (!review?.complete) parent.append(element('p', 'review-notice', 'This game started before turn tracking was available. Only recorded turns are shown; averages and highlights cover those turns.'));
+  if (!review?.complete) parent.append(element('p', 'review-notice', t('review.incomplete')));
   if (!review?.turns.length) {
-    parent.append(element('p', 'fine', 'No turn history is available for this game. The final board and scores are shown below.'));
+    parent.append(element('p', 'fine', t('review.noHistory')));
     return;
   }
-  parent.append(element('p', 'fine', 'Averages include passes and timeouts. Cards placed includes wild replacements. Turn numbers follow the order of play; ties share the highest or lowest mark.'));
+  parent.append(element('p', 'fine', t('review.notes')));
   const summaries = element('div', 'review-summaries');
   room.players.forEach((player, index) => {
     const stats = review.players.find(p => p.playerId === player.id);
     const panel = element('article', `review-player player-${index}`);
-    panel.append(element('h3', '', player.name), element('strong', 'review-score', `${player.score} pts`));
+    panel.append(element('h3', '', player.name), element('strong', 'review-score', t('game.points', { n: player.score })));
     const metrics = element('dl', 'review-metrics');
     const metric = (label, value) => { const group = element('div'); group.append(element('dt', '', label), element('dd', '', value)); metrics.append(group); };
-    metric('Average cards / turn', stats.averageCards === null ? '—' : stats.averageCards.toFixed(2));
-    metric('Average points / turn', stats.averagePoints === null ? '—' : stats.averagePoints.toFixed(2));
-    metric('Cards placed', String(stats.cardsPlaced)); metric('Turns', String(stats.turns));
+    metric(t('review.avgCards'), stats.averageCards === null ? '—' : stats.averageCards.toFixed(2));
+    metric(t('review.avgPoints'), stats.averagePoints === null ? '—' : stats.averagePoints.toFixed(2));
+    metric(t('review.cardsPlaced'), String(stats.cardsPlaced)); metric(t('review.turns'), String(stats.turns));
     panel.append(metrics);
-    for (const [label, points, turns] of [['Highest', stats.highest, stats.highestTurns], ['Lowest', stats.lowest, stats.lowestTurns]]) {
+    for (const [kind, points, turns] of [['highest', stats.highest, stats.highestTurns], ['lowest', stats.lowest, stats.lowestTurns]]) {
       const line = element('div', 'review-extreme');
-      line.append(element('span', '', `${label}: ${points === null ? '—' : `${points} pts`}`));
-      for (const turn of turns) { const button = element('button', 'review-turn-link', `#${turn}`); button.type = 'button'; button.setAttribute('aria-label', `${player.name}, ${label.toLowerCase()} scoring turn ${turn}, ${points} points`); button.onclick = () => selectReviewTurn(turn); line.append(button); }
+      line.append(element('span', '', t(`review.${kind}`, { points: points === null ? '—' : t('game.points', { n: points }) })));
+      for (const turn of turns) { const button = element('button', 'review-turn-link', `#${turn}`); button.type = 'button'; button.setAttribute('aria-label', t(`review.${kind}Turn`, { name: player.name, turn, points })); button.onclick = () => selectReviewTurn(turn); line.append(button); }
       panel.append(line);
     }
     summaries.append(panel);
   });
   parent.append(summaries);
-  parent.append(element('h3', '', 'Points per turn'));
+  parent.append(element('h3', '', t('review.perTurn')));
   const legend = element('div', 'review-legend');
   room.players.forEach((p, i) => legend.append(element('span', `player-${i}`, p.name)));
   parent.append(legend);
-  const chart = element('div', 'review-chart'); chart.setAttribute('aria-label', 'Points scored on each recorded turn');
+  const chart = element('div', 'review-chart'); chart.setAttribute('aria-label', t('review.chartLabel'));
   const peak = Math.max(1, ...review.turns.map(t => t.points));
   for (const turn of review.turns) {
     const index = room.players.findIndex(p => p.id === turn.playerId);
     const bar = element('button', `review-bar player-${index}${reviewTurn === turn.turn ? ' active' : ''}`);
-    bar.type = 'button'; bar.setAttribute('aria-label', `Turn ${turn.turn}: ${turn.playerName}, ${turn.points} points`);
+    const labels = { turn: turn.turn, name: turn.playerName, points: turn.points };
+    bar.type = 'button'; bar.setAttribute('aria-label', t('review.barLabel', labels));
     bar.setAttribute('aria-pressed', String(reviewTurn === turn.turn));
-    bar.title = `#${turn.turn} · ${turn.playerName} · ${turn.points} pts`;
+    bar.title = t('review.barTitle', labels);
     bar.append(element('span', 'review-bar-value', String(turn.points)));
     const fill = element('span', 'review-bar-fill'); fill.style.height = `${Math.max(3, turn.points / peak * 110)}px`;
     bar.append(fill, element('small', '', String(turn.turn))); bar.onclick = () => selectReviewTurn(turn.turn); chart.append(bar);
@@ -232,29 +240,29 @@ function renderReview() {
   parent.append(chart);
   const chosen = review.turns.find(t => t.turn === reviewTurn);
   const detail = element('div', 'review-selection'); detail.setAttribute('role', 'status');
-  detail.append(element('p', '', chosen ? `Turn ${chosen.turn} · ${chosen.playerName} · +${chosen.points} points · ${chosen.cardsPlaced} cards placed` : 'Select a turn to inspect its cards and highlight their positions on the final board.'));
+  detail.append(element('p', '', chosen ? t('review.selected', { turn: chosen.turn, name: chosen.playerName, points: chosen.points, cards: chosen.cardsPlaced }) : t('review.selectPrompt')));
   if (chosen) {
     const cards = element('div', 'review-cards');
-    for (const placement of chosen.placements) { const item = element('div'); item.append(cardElement(placement.card), element('small', '', `(${placement.spot})${placement.kind === 'swap' ? ' · wild replacement' : ''}`)); cards.append(item); }
-    if (!chosen.placements.length) cards.append(element('span', 'fine', chosen.kind === 'timeout' ? 'Timed out · no cards placed' : 'Passed · no cards placed'));
+    for (const placement of chosen.placements) { const item = element('div'); item.append(cardElement(placement.card), element('small', '', `(${placement.spot})${placement.kind === 'swap' ? t('review.wildReplacement') : ''}`)); cards.append(item); }
+    if (!chosen.placements.length) cards.append(element('span', 'fine', chosen.kind === 'timeout' ? t('review.timedOutNone') : t('review.passedNone')));
     detail.append(cards);
-    const clear = element('button', 'secondary', 'Clear selection'); clear.type = 'button'; clear.onclick = () => selectReviewTurn(null); detail.append(clear);
+    const clear = element('button', 'secondary', t('review.clear')); clear.type = 'button'; clear.onclick = () => selectReviewTurn(null); detail.append(clear);
   }
   parent.append(detail);
   const log = element('details', 'review-log'); log.open = true;
-  log.append(element('summary', '', 'Turn history · who placed each card'));
+  log.append(element('summary', '', t('review.log')));
   const scroll = element('div', 'review-table-scroll');
-  const table = element('table'); const caption = element('caption', 'fine', 'Recorded turns. The opening card is dealt automatically.'); table.append(caption);
+  const table = element('table'); const caption = element('caption', 'fine', t('review.caption')); table.append(caption);
   const thead = element('thead'); const header = element('tr');
-  for (const label of ['Turn', 'Player', 'Action / cards placed', 'Points', 'Score']) { const th = element('th', '', label); th.scope = 'col'; header.append(th); }
+  for (const label of ['colTurn', 'colPlayer', 'colAction', 'colPoints', 'colScore']) { const th = element('th', '', t(`review.${label}`)); th.scope = 'col'; header.append(th); }
   thead.append(header); table.append(thead);
   const body = element('tbody');
   for (const turn of review.turns) {
     const row = element('tr', reviewTurn === turn.turn ? 'selected-turn' : '');
-    const number = element('td'); const button = element('button', 'review-turn-link', `#${turn.turn}`); button.type = 'button'; button.setAttribute('aria-label', `Review turn ${turn.turn}`); button.onclick = () => selectReviewTurn(turn.turn); number.append(button);
-    const action = element('td'); action.append(element('span', 'fine', turn.kind === 'timeout' ? 'Timed out' : turn.kind === 'pass' ? 'Passed / traded' : 'Played'));
+    const number = element('td'); const button = element('button', 'review-turn-link', `#${turn.turn}`); button.type = 'button'; button.setAttribute('aria-label', t('review.reviewTurn', { turn: turn.turn })); button.onclick = () => selectReviewTurn(turn.turn); number.append(button);
+    const action = element('td'); action.append(element('span', 'fine', turn.kind === 'timeout' ? t('review.timedOut') : turn.kind === 'pass' ? t('review.passed') : t('review.played')));
     const cards = element('div', 'review-log-cards');
-    for (const p of turn.placements) { const item = element('span', 'review-log-card'); item.append(cardElement(p.card), element('small', '', `(${p.spot})${p.kind === 'swap' ? ' · swap' : ''}`)); cards.append(item); }
+    for (const p of turn.placements) { const item = element('span', 'review-log-card'); item.append(cardElement(p.card), element('small', '', `(${p.spot})${p.kind === 'swap' ? t('review.swap') : ''}`)); cards.append(item); }
     action.append(cards);
     row.append(number, element('td', '', turn.playerName), action, element('td', 'review-points', `+${turn.points}`), element('td', '', turn.scores.join(' – '))); body.append(row);
   }
@@ -269,6 +277,31 @@ function avatarStyle(node, name, color) {
 function renderProfilePreview() {
   avatarStyle($('profile-avatar'), $('profile-name').value, $('profile-color').value);
 }
+const tileColourInputs = () => [...document.querySelectorAll('[data-tile-colour]')];
+function formTileColors() {
+  const colors = Object.fromEntries(tileColourInputs().map(input => [input.dataset.tileColour, input.value.toLowerCase()]));
+  // Store null for the standard palette so future palette tweaks still reach these players.
+  return Object.entries(SquareI18n.defaultTileColors).every(([name, value]) => colors[name] === value) ? null : colors;
+}
+function fillProfileForm(profile) {
+  $('profile-name').value = profile.name;
+  $('profile-color').value = profile.color;
+  $('profile-language').value = profile.language;
+  const colors = { ...SquareI18n.defaultTileColors, ...(profile.tileColors || {}) };
+  for (const input of tileColourInputs()) input.value = colors[input.dataset.tileColour];
+  renderProfilePreview();
+}
+// Settings preview live while editing; Cancel or leaving the form restores the saved ones.
+function applyAccountSettings(profile) {
+  SquareI18n.applySettings({ language: profile.language, tileColors: profile.tileColors });
+}
+function setEditingAccount(open) {
+  editingAccount = open && Boolean(signedInEmail);
+  show('profile-form', editingAccount);
+  show('account-edit', !editingAccount);
+  $('account-edit').setAttribute('aria-expanded', String(editingAccount));
+  if (!editingAccount) { fillProfileForm(savedProfile); applyAccountSettings(savedProfile); }
+}
 function renderAccountAppearance() {
   show('header-account', true);
   const signedIn = Boolean(signedInEmail);
@@ -277,27 +310,65 @@ function renderAccountAppearance() {
   $('header-account').classList.toggle('has-profile', signedIn);
   if (signedIn) {
     avatarStyle($('account-initial'), savedProfile.name, savedProfile.color);
-    $('header-account').setAttribute('aria-label', savedProfile.name ? `${savedProfile.name}'s account` : 'Set up your account');
-  } else $('header-account').setAttribute('aria-label', 'Account');
+    $('header-account').setAttribute('aria-label', savedProfile.name ? t('account.named', { name: savedProfile.name }) : t('account.setUp'));
+  } else $('header-account').setAttribute('aria-label', t('account.label'));
   show('create-name-field', !signedIn); show('join-name-field', !signedIn);
   show('profile-required', signedIn && !savedProfile.name);
   $('create-button').disabled = busy || (signedIn && !savedProfile.name);
   if (room) $('join-button').disabled = busy || (room.timerSeconds >= 86400 && !accountToken) || (signedIn && !savedProfile.name);
 }
 function useAccount(email, profile) {
-  if (signedInEmail !== email) savedProfile = { name: '', color: '#285b36' };
+  if (signedInEmail !== email) savedProfile = blankProfile();
   signedInEmail = email;
   if (profile) {
-    savedProfile = profile;
-    $('profile-name').value = profile.name;
-    $('profile-color').value = profile.color;
-    renderProfilePreview();
+    savedProfile = { ...blankProfile(), ...profile };
+    SquareI18n.rememberSettings(savedProfile);
+    if (!editingAccount) { fillProfileForm(savedProfile); applyAccountSettings(savedProfile); }
+    // A new account has to choose a name before playing, so open the form for it.
+    if (accountRoute && !savedProfile.name && !editingAccount) setEditingAccount(true);
   }
   for (const id of ['host-email']) {
     $(id).value = email;
     $(id).readOnly = true;
   }
   renderAccountAppearance();
+}
+function renderAccountData() {
+  const data = accountData;
+  if (!data) return;
+  $('account-identity').textContent = data.email;
+  $('account-win-percent').textContent = `${data.winPercent}%`;
+  $('account-games-played').textContent = String(data.gamesPlayed);
+  $('account-current-count').textContent = String(data.currentGames.length);
+  const list = $('account-current-games'); list.replaceChildren();
+  if (!data.currentGames.length) list.append(element('p', 'fine', t('history.noCurrent')));
+  for (const game of data.currentGames) {
+    const link = element('a'); link.href = `${basePath}/room/${game.id}`;
+    link.append(element('span', '', t('history.room', { id: game.id, opponent: game.opponent })),
+      element('small', '', game.status === 'waiting' ? t('history.waiting') : game.status === 'paused' ? t('history.paused') : game.yourTurn ? t('history.yourTurn') : t('history.theirTurn')));
+    list.append(link);
+  }
+  const finished = $('account-finished-games'); finished.replaceChildren();
+  if (!data.finishedGames?.length) finished.append(element('p', 'fine', t('history.noCompleted')));
+  for (const game of data.finishedGames || []) {
+    const link = element('a'); link.href = `${basePath}/room/${game.id}`;
+    const result = t(game.outcome === 'win' ? 'history.won' : game.outcome === 'loss' ? 'history.lost' : 'history.tied');
+    const reason = game.finishReason === 'missed-turns' ? t('history.missedTurns') : '';
+    const date = game.finishedAt ? new Date(game.finishedAt).toLocaleDateString(SquareI18n.locale()) : '';
+    link.append(element('span', '', t('history.room', { id: game.id, opponent: game.opponent })),
+      element('small', '', `${result} ${game.yourScore}–${game.opponentScore}${reason}${date ? ` · ${date}` : ''}`));
+    finished.append(link);
+  }
+}
+// Language and tile colours belong to the account, so signing out restores the defaults.
+function resetAccountSettings() {
+  savedProfile = blankProfile();
+  accountData = null;
+  editingAccount = false;
+  show('profile-form', false); show('account-edit', true);
+  SquareI18n.rememberSettings(null);
+  fillProfileForm(savedProfile);
+  applyAccountSettings(savedProfile);
 }
 // index.html marks a remembered session before first paint so the email form never flashes.
 function doneRestoringAccount() { document.documentElement.classList.remove('account-restoring'); }
@@ -321,36 +392,16 @@ async function refreshAccount() {
     useAccount(data.email, data.profile);
     show('account-sign-in', false); show('account-profile', true);
     show('account-history', true);
-    $('account-identity').textContent = data.email;
-    $('account-win-percent').textContent = `${data.winPercent}%`;
-    $('account-games-played').textContent = String(data.gamesPlayed);
-    $('account-current-count').textContent = String(data.currentGames.length);
-    const list = $('account-current-games'); list.replaceChildren();
-    if (!data.currentGames.length) list.append(element('p', 'fine', 'No games in progress yet.'));
-    for (const game of data.currentGames) {
-      const link = element('a'); link.href = `${basePath}/room/${game.id}`;
-      link.append(element('span', '', `Room ${game.id} · ${game.opponent}`),
-        element('small', '', game.status === 'waiting' ? 'Waiting for a friend' : game.status === 'paused' ? 'Paused' : game.yourTurn ? 'Your turn' : "Opponent's turn"));
-      list.append(link);
-    }
-    const finished = $('account-finished-games'); finished.replaceChildren();
-    if (!data.finishedGames?.length) finished.append(element('p', 'fine', 'No completed games yet.'));
-    for (const game of data.finishedGames || []) {
-      const link = element('a'); link.href = `${basePath}/room/${game.id}`;
-      const result = game.outcome === 'win' ? 'Won' : game.outcome === 'loss' ? 'Lost' : 'Tied';
-      const reason = game.finishReason === 'missed-turns' ? ' · missed turns' : '';
-      const date = game.finishedAt ? new Date(game.finishedAt).toLocaleDateString() : '';
-      link.append(element('span', '', `Room ${game.id} · ${game.opponent}`),
-        element('small', '', `${result} ${game.yourScore}–${game.opponentScore}${reason}${date ? ` · ${date}` : ''}`));
-      finished.append(link);
-    }
+    accountData = data;
+    renderAccountData();
   } catch (error) {
     if (accountToken !== requestedToken || localStorage.getItem('square-account-token') !== requestedToken) return;
     if (error.status === 401) {
       localStorage.removeItem('square-account-token'); accountToken = null; signedInEmail = null;
+      resetAccountSettings();
       show('account-sign-in', true); show('account-profile', false);
       show('account-history', false);
-      $('account-error').textContent = 'Your sign-in expired. Request a new code.';
+      $('account-error').textContent = t('signin.expired');
     } else $('account-error').textContent = error.message;
   } finally {
     doneRestoringAccount();
@@ -358,16 +409,40 @@ async function refreshAccount() {
   renderLanding();
 }
 for (const id of ['profile-name', 'profile-color']) $(id).addEventListener('input', renderProfilePreview);
+function previewFormSettings() {
+  SquareI18n.applySettings({ language: $('profile-language').value, tileColors: formTileColors() });
+}
+$('profile-language').addEventListener('change', previewFormSettings);
+for (const input of tileColourInputs()) input.addEventListener('input', previewFormSettings);
+function setFormTileColors(colors) {
+  for (const input of tileColourInputs()) input.value = colors[input.dataset.tileColour];
+  previewFormSettings();
+}
+$('tile-colours-colourblind').addEventListener('click', () => setFormTileColors(SquareI18n.colourblindTileColors));
+$('tile-colours-reset').addEventListener('click', () => setFormTileColors(SquareI18n.defaultTileColors));
+$('account-edit').addEventListener('click', () => {
+  setError('profile-error'); $('profile-message').textContent = '';
+  setEditingAccount(true);
+  $('profile-name').focus();
+});
+$('profile-cancel').addEventListener('click', () => {
+  setError('profile-error'); $('profile-message').textContent = '';
+  setEditingAccount(false);
+  $('account-edit').focus();
+});
 $('profile-form').addEventListener('submit', async event => {
   event.preventDefault();
   const requestedToken = accountToken;
   $('profile-save').disabled = true;
   setError('profile-error'); $('profile-message').textContent = '';
   try {
-    const result = await api('/api/account/profile', { method: 'POST', body: JSON.stringify({ name: $('profile-name').value, color: $('profile-color').value }) });
+    const result = await api('/api/account/profile', { method: 'POST', body: JSON.stringify({ name: $('profile-name').value, color: $('profile-color').value, language: $('profile-language').value, tileColors: formTileColors() }) });
     if (accountToken !== requestedToken || localStorage.getItem('square-account-token') !== requestedToken) return;
+    editingAccount = false;
     useAccount(result.email, result.profile);
-    $('profile-message').textContent = 'Account saved. Your name will be used in new games.';
+    setEditingAccount(false);
+    $('profile-message').textContent = t('profile.saved');
+    $('account-edit').focus();
   } catch (error) { setError('profile-error', error.message); }
   finally { $('profile-save').disabled = false; }
 });
@@ -387,15 +462,15 @@ function renderScores() {
   const parent = $('players'); parent.replaceChildren();
   room.players.forEach((player, index) => {
     const pill = element('div', `player-pill${index === room.current && room.status === 'playing' ? ' current' : ''}`);
-    pill.append(element('small', '', `${player.name}${player.isYou ? ' · you' : ''} · ${player.cardCount} cards`), element('strong', '', `${player.score} pts`));
+    pill.append(element('small', '', `${player.name}${player.isYou ? ` · ${t('game.you')}` : ''} · ${t('game.cards', { n: player.cardCount })}`), element('strong', '', t('game.points', { n: player.score })));
     parent.append(pill);
   });
-  $('turn-label').textContent = room.status === 'finished' ? 'FINAL SCORE' : 'TIME REMAINING';
-  $('deck-count').textContent = `${room.deckCount} cards in draw pile`;
+  $('turn-label').textContent = room.status === 'finished' ? t('game.finalScore') : t('game.timeLeft');
+  $('deck-count').textContent = t('game.deck', { n: room.deckCount });
 }
 function renderLastMove() {
   show('last-move', Boolean(room.lastMove));
-  if (room.lastMove) $('last-move').textContent = `${room.lastMove.playerName} ${room.lastMove.kind === 'play' ? 'played' : room.lastMove.kind === 'timeout' ? 'timed out' : 'passed'} · +${room.lastMove.points} points${room.lastMove.lots ? ` · ${room.lastMove.lots} lot${room.lastMove.lots === 1 ? '' : 's'} ×${2 ** room.lastMove.lots}` : ''}`;
+  if (room.lastMove) $('last-move').textContent = t('game.lastMove', { name: room.lastMove.playerName, kind: room.lastMove.kind, points: room.lastMove.points, lots: room.lastMove.lots });
 }
 function renderBoard() {
   const parent = $('board'); parent.replaceChildren();
@@ -416,7 +491,7 @@ function renderBoard() {
     const preview = staged.find(p => p.x === x && p.y === y);
     const cell = element('button', `cell ${existing || preview ? 'occupied' : 'empty'}`);
     cell.type = 'button';
-    cell.setAttribute('aria-label', existing ? `Board card ${existing.wild ? 'wild' : `${existing.color} ${existing.shape} ${existing.number}`} at ${x}, ${y}` : `Empty position ${x}, ${y}`);
+    cell.setAttribute('aria-label', existing ? t('game.boardCard', { card: describeCard(existing), x, y }) : t('game.emptyCell', { x, y }));
     if (existing) cell.append(cardElement(existing, false, false, recent.has(key)));
     else if (preview) {
       const tile = cardElement(preview.card, false, true);
@@ -425,7 +500,7 @@ function renderBoard() {
     }
     if (existing && room.status === 'finished') {
       const owner = room.review?.turns.findLast(turn => turn.placements.some(p => p.spot === key && p.card.id === existing.id));
-      const attribution = owner ? `Placed by ${owner.playerName} on turn ${owner.turn}` : key === '0,0' && room.review?.complete ? 'Opening card · automatically dealt' : 'Placement history unavailable';
+      const attribution = owner ? t('game.placedBy', { name: owner.playerName, turn: owner.turn }) : key === '0,0' && room.review?.complete ? t('game.openingCard') : t('game.noHistory');
       cell.title = attribution;
       cell.setAttribute('aria-label', `${cell.getAttribute('aria-label')}. ${attribution}`);
       cell.classList.toggle('review-highlight', reviewSpots.has(key));
@@ -450,28 +525,36 @@ function renderHand() {
     });
     parent.append(button);
   });
-  $('hand-help').textContent = canAct ? ($('trade-mode').checked ? 'Select cards to exchange, then pass.' : 'Select a card, then choose an empty square.') : 'Your cards stay private until your turn.';
+  $('hand-help').textContent = canAct ? ($('trade-mode').checked ? t('game.tradeHelp') : t('game.handHelp')) : t('game.handWaiting');
   renderControls();
 }
-function renderStaged() {
-  $('staged').textContent = staged.length ? `${staged.length} card${staged.length === 1 ? '' : 's'} staged: ${staged.map(p => `(${p.x}, ${p.y})`).join(', ')}` : room.pendingSwap ? `Wild exchanges · base ${room.pendingSwap.base}, ${room.pendingSwap.lots} lot(s). Exchange another wild or play your turn.` : 'No cards staged.';
-  updatePreview();
+function renderStaged(check = true) {
+  $('staged').textContent = staged.length ? t('game.staged', { n: staged.length, spots: staged.map(p => `(${p.x}, ${p.y})`).join(', ') }) : room.pendingSwap ? t('game.pendingSwap', { base: room.pendingSwap.base, lots: room.pendingSwap.lots }) : t('game.noneStaged');
+  if (check) updatePreview();
+}
+// Messages are built at display time so a language change also updates the preview.
+function previewMessage() {
+  const { status } = previewStatus;
+  if (status === 'legal') return t('preview.legal', previewStatus);
+  if (status === 'illegal') return t('preview.illegal', { reason: SquareI18n.serverMessage(previewStatus.reason) });
+  if (status === 'unavailable') return t('preview.failed', previewStatus);
+  return t(status === 'checking' ? 'preview.checking' : 'preview.empty');
 }
 function showPreview() {
   const node = $('move-preview');
   node.className = `move-preview ${previewStatus.status}`;
-  node.textContent = previewStatus.message;
+  node.textContent = previewMessage();
   renderControls();
 }
 async function updatePreview() {
   const revision = ++previewRevision;
   if (!staged.length) {
-    previewStatus = { status: 'empty', message: 'Place tiles to preview your score.' };
+    previewStatus = { status: 'empty' };
     showPreview();
     renderBoard();
     return;
   }
-  previewStatus = { status: 'checking', message: 'Checking move…' };
+  previewStatus = { status: 'checking' };
   showPreview();
   renderBoard();
   try {
@@ -481,11 +564,11 @@ async function updatePreview() {
     if (revision !== previewRevision) return;
     if (result.legal) {
       const currentScore = room.players.find(player => player.isYou)?.score ?? 0;
-      previewStatus = { status: 'legal', message: `This move: +${result.points} pts · Total if played: ${currentScore + result.points} pts` };
-    } else previewStatus = { status: 'illegal', message: `Illegal move: ${result.reason}` };
+      previewStatus = { status: 'legal', points: result.points, total: currentScore + result.points };
+    } else previewStatus = { status: 'illegal', reason: result.reason };
   } catch (error) {
     if (revision !== previewRevision) return;
-    previewStatus = { status: 'unavailable', message: `Could not check move: ${error.message}` };
+    previewStatus = { status: 'unavailable', message: error.message };
   }
   showPreview();
   renderBoard();
@@ -497,7 +580,7 @@ function renderControls() {
   $('play-button').disabled = !canAct || previewStatus.status !== 'legal';
   $('pass-button').disabled = !canAct;
   $('undo-button').disabled = !canAct || staged.length === 0;
-  $('pass-button').textContent = $('trade-mode').checked && tradeIds.size ? `Trade ${tradeIds.size} and pass` : 'Pass turn';
+  $('pass-button').textContent = $('trade-mode').checked && tradeIds.size ? t('game.tradePass', { n: tradeIds.size }) : t('game.pass');
 }
 function boardClick(x, y, existing) {
   if (!room || room.status !== 'playing' || !currentIsYou() || busy || !selected || $('trade-mode').checked) return;
@@ -521,13 +604,13 @@ function renderPauseControls() {
   const mine = room.pauseRequestedBy === index;
   const accepted = room.resumeAccepted.includes(index);
   $('pause-status').textContent = room.status === 'paused'
-    ? accepted ? 'Waiting for your opponent to resume.' : 'Game paused. Both players must agree to resume.'
-    : requested ? mine ? 'Pause requested. The timer runs until your opponent accepts.' : 'Your opponent requested a pause. The timer is still running.' : '';
-  if (room.mode === 'ai' && room.status === 'paused') $('pause-status').textContent = 'Game paused. Resume when you are ready.';
-  $('pause-button').textContent = room.status === 'paused' ? room.mode === 'ai' ? 'Resume game' : 'Agree to resume' : requested ? mine ? 'Pause requested' : 'Accept pause' : room.mode === 'ai' ? 'Pause game' : 'Request pause';
+    ? accepted ? t('pause.waitingResume') : t('pause.bothAgree')
+    : requested ? mine ? t('pause.mine') : t('pause.theirs') : '';
+  if (room.mode === 'ai' && room.status === 'paused') $('pause-status').textContent = t('pause.botPaused');
+  $('pause-button').textContent = t(room.status === 'paused' ? room.mode === 'ai' ? 'pause.resumeBot' : 'pause.agreeResume' : requested ? mine ? 'pause.requested' : 'pause.accept' : room.mode === 'ai' ? 'pause.pauseBot' : 'pause.request');
   $('pause-button').disabled = busy || (room.status === 'paused' ? accepted : requested && mine);
   show('cancel-pause', room.status === 'playing' && requested);
-  $('cancel-pause').textContent = mine ? 'Cancel request' : 'Decline pause';
+  $('cancel-pause').textContent = mine ? t('pause.cancel') : t('pause.decline');
   $('cancel-pause').disabled = busy;
 }
 $('pause-button').addEventListener('click', () => act({ type: room.status === 'paused' ? 'resume' : room.pauseRequestedBy != null ? 'accept-pause' : 'request-pause' }));
@@ -545,13 +628,13 @@ $('delete-room').addEventListener('click', async () => {
 async function act(input) {
   if (busy) return;
   busy = true; renderControls(); setError('room-error');
-  if (room.mode === 'ai' && ['play', 'pass'].includes(input.type)) $('room-heading').textContent = 'Bot is thinking…';
+  if (room.mode === 'ai' && ['play', 'pass'].includes(input.type)) $('room-heading').textContent = t('room.botThinking');
   try {
     const data = await api(`/api/rooms/${roomId}/action`, { method: 'POST', body: JSON.stringify(input) });
     if (input.type !== 'swap') { staged = []; tradeIds.clear(); $('trade-mode').checked = false; }
     selected = null;
     setRoom(data);
-    if (data.notificationSent === false && room.timerSeconds >= 86400 && room.status === 'playing') setError('room-error', 'Move saved, but the email could not be sent. Share the invite link with your opponent.');
+    if (data.notificationSent === false && room.timerSeconds >= 86400 && room.status === 'playing') setError('room-error', t('room.emailFailed'));
   } catch (error) {
     setError('room-error', error.message);
     await refresh();
@@ -559,11 +642,11 @@ async function act(input) {
 }
 function updateCountdown() {
   if (!room || room.status === 'waiting') return;
-  if (room.status === 'finished') { $('countdown').textContent = room.finishReason === 'missed-turns' ? 'Tie · missed turns' : room.winner ? `${room.players.find(p => p.id === room.winner)?.name} wins` : 'Tie game'; return; }
-  if (room.status === 'paused') { $('countdown').textContent = 'Paused'; return; }
+  if (room.status === 'finished') { $('countdown').textContent = room.finishReason === 'missed-turns' ? t('result.missedTurns') : room.winner ? t('result.wins', { name: room.players.find(p => p.id === room.winner)?.name }) : t('result.tie'); return; }
+  if (room.status === 'paused') { $('countdown').textContent = t('result.paused'); return; }
   const left = Math.max(0, Math.ceil((room.deadline - Date.now()) / 1000));
   const days = Math.floor(left / 86400), hours = Math.floor((left % 86400) / 3600), minutes = Math.floor((left % 3600) / 60), seconds = left % 60;
-  $('countdown').textContent = days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : `${minutes}:${String(seconds).padStart(2, '0')}`;
+  $('countdown').textContent = days ? t('time.dh', { d: days, h: hours }) : hours ? t('time.hm', { h: hours, m: minutes }) : `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 async function refresh() {
   if (!roomId || busy || room?.status === 'finished') return;
@@ -595,8 +678,10 @@ function renderBotSetup() {
     $('minute-label').textContent = formatTimer(timerSeconds);
     document.querySelectorAll('[data-days]').forEach(button => button.classList.remove('active'));
   }
-  $('timer-help').textContent = bot ? 'Choose a minute timer for your turns.' : 'Day-length games require sign-in. Turn emails go to your account address.';
-  $('create-button').textContent = bot ? 'Play against a bot ↗' : 'Create room ↗';
+  $('timer-help').textContent = bot ? t('setup.botTimerHelp') : t('setup.timerHelp');
+  $('create-button').textContent = bot ? t('setup.playBot') : t('setup.createRoom');
+  $('minute-label').textContent = formatTimer(timerSeconds);
+  document.querySelectorAll('[data-days]').forEach(button => { button.textContent = formatTimer(Number(button.dataset.days) * 86400); });
 }
 document.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', () => {
   gameMode = button.dataset.mode;
@@ -636,7 +721,7 @@ $('invite-button').addEventListener('click', async () => {
 async function joinByCode() {
   setError('join-code-error');
   const code = $('join-code-input').value.trim();
-  if (!/^\d{4}$/.test(code)) return setError('join-code-error', 'Enter the 4-digit room code.');
+  if (!/^\d{4}$/.test(code)) return setError('join-code-error', t('setup.codeError'));
   playerToken = localStorage.getItem(`square-token-${code}`);
   try { setRoom(await api(`/api/rooms/${code}`)); }
   catch (error) { playerToken = null; setError('join-code-error', error.message); }
@@ -644,8 +729,8 @@ async function joinByCode() {
 $('join-code-button').addEventListener('click', joinByCode);
 $('join-code-input').addEventListener('keydown', event => { if (event.key === 'Enter') joinByCode(); });
 $('copy-link').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(`${location.origin}${basePath}/room/${roomId}`); $('copy-status').textContent = 'Invite link copied'; }
-  catch { $('copy-status').textContent = 'Copy the room URL from your browser'; }
+  try { await navigator.clipboard.writeText(`${location.origin}${basePath}/room/${roomId}`); $('copy-status').textContent = t('room.copied'); }
+  catch { $('copy-status').textContent = t('room.copyFailed'); }
 });
 $('play-button').addEventListener('click', () => act({ type: 'play', placements: staged.map(({ card, ...place }) => place) }));
 $('undo-button').addEventListener('click', () => { staged.pop(); renderBoard(); renderHand(); renderStaged(); });
@@ -656,12 +741,12 @@ $('code-request-form').addEventListener('submit', async event => {
   event.preventDefault();
   const button = event.currentTarget.querySelector('button');
   button.disabled = true;
-  setError('account-error'); $('account-message').textContent = 'Sending code…';
+  setError('account-error'); $('account-message').textContent = t('signin.sending');
   try {
     await api('/api/account/request-code', { method: 'POST', body: JSON.stringify({ email: $('account-email').value }) });
     show('code-verify-form', true);
     $('account-code').focus();
-    $('account-message').textContent = 'Check your email for a six-digit code. It expires in 10 minutes.';
+    $('account-message').textContent = t('signin.checkEmail');
   } catch (error) { $('account-message').textContent = ''; setError('account-error', error.message); }
   finally { button.disabled = false; }
 });
@@ -716,7 +801,8 @@ $('code-verify-form').addEventListener('submit', async event => {
 $('account-sign-out').addEventListener('click', () => {
   const email = signedInEmail;
   localStorage.removeItem('square-account-token'); accountToken = null; signedInEmail = null;
-  savedProfile = { name: '', color: '#285b36' };
+  resetAccountSettings();
+  $('profile-message').textContent = '';
   guestMode = false;
   sessionStorage.removeItem('square-guest-mode');
   for (const id of ['host-email']) {
@@ -736,6 +822,14 @@ function positionPauseControls() {
 }
 mobileRoomLayout.addEventListener('change', positionPauseControls);
 positionPauseControls();
+
+// Redraw everything built in script when the account language changes.
+SquareI18n.onChange(() => {
+  renderBotSetup();
+  renderAccountData();
+  render();
+  if (roomId) updateCountdown();
+});
 
 async function start() {
   let signInError;
@@ -763,7 +857,7 @@ async function start() {
   if (signInError) {
     setError('room-error', signInError);
     // Keep recovery available even if this browser had another account signed in.
-    const recovery = element('a', '', ' Sign in with an email code');
+    const recovery = element('a', '', t('signin.withCode'));
     recovery.href = `${basePath}/account`;
     $('room-error').append(recovery);
   }

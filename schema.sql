@@ -51,6 +51,12 @@ create table if not exists public.square_account_profiles (
   color text not null default '#285b36' check (color ~ '^#[0-9a-f]{6}$'),
   updated_at timestamptz not null default now()
 );
+alter table public.square_account_profiles
+  add column if not exists language text not null default 'en',
+  add column if not exists tile_colors jsonb;
+alter table public.square_account_profiles drop constraint if exists square_account_profiles_language_check;
+alter table public.square_account_profiles
+  add constraint square_account_profiles_language_check check (language in ('en', 'zh'));
 alter table public.square_account_profiles enable row level security;
 revoke all on public.square_account_profiles from anon, authenticated;
 grant select, insert, update on public.square_account_profiles to service_role;

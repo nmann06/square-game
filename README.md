@@ -101,6 +101,8 @@ The tests in `test/` cover the game rules and scoring, the bot, accounts and ses
 
 **Post-game review.** Turn history is stored in the room and only made public once the game ends. Averages include passes and timeouts, card counts include wild replacements, and the automatically dealt opening card isn't counted for either player. Select a turn to highlight its cards on the final board, or select a board card to see who placed it. Games created before this feature show an incomplete-history notice.
 
+**Account settings.** The account page's **Edit account** button opens the name, icon colour, language and tile colour settings. Signed-in players can switch the interface and tutorial between English and Simplified Chinese (`public/i18n.js`), and recolour each tile colour, starting from a colourblind-safe preset if they like. Both are saved with the account profile and cached in the browser under `square-account-settings` so they apply before sign-in finishes. Signing out returns to English and the standard colours. Server messages are translated in the browser; emails stay in English.
+
 **Tutorial.** The first visit in each browser opens a four-part tutorial, and the header's **How to play** button reopens it. It remembers that it has been seen with the `square-tutorial-seen-v1` local-storage key. Its boards use the game's own tile renderer, with no image assets.
 
 ## Deploy on Render
@@ -122,6 +124,8 @@ The tests in `test/` cover the game rules and scoring, the bot, accounts and ses
 5. If the game was already deployed, rerun the updated `schema.sql`. Open `/square-game/health` on the game service and check that `durableStorage`, `emailConfigured` and `accountConfigured` are all `true`. Then test sign-in and a 1-day room with two email addresses through the public domain.
 
 If email sign-in reports `PGRST205` for `public.square_account_profiles`, run [`migrations/20261003_account_profiles.sql`](migrations/20261003_account_profiles.sql) in the SQL editor of the Supabase project set by `SUPABASE_URL`, then retry. It creates the profile table, restricts it to the service role and reloads the REST schema cache. Existing profiles are kept.
+
+If saving the account reports a missing `language` or `tile_colors` column, run [`migrations/20261016_account_preferences.sql`](migrations/20261016_account_preferences.sql) the same way. Sign-in keeps working before it is applied, but language and tile colour changes can't be saved.
 
 **Homepage client.** The `nathanielmann.ca` homepage is a separate Render static site. It hosts a copy of this repo's browser files under `/square-game` and calls this service's API. Set the homepage's `GAME_API_ORIGIN` to this service's `onrender.com` origin. After changing anything in `public/`, run `node sync-game.js` in the homepage repo and deploy both. This service doesn't claim the root domain.
 

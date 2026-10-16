@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { storedProfile } from './account.js';
 
 const url = process.env.SUPABASE_URL?.replace(/\/$/, '');
 const secret = process.env.SUPABASE_SECRET_KEY;
@@ -94,14 +95,18 @@ export async function listAccountRooms(email) {
 export const durableStorage = Boolean(url && secret);
 export async function getAccountProfile(email) {
   if (durableStorage) {
-    const rows = await remote('GET', `?email=eq.${encodeURIComponent(email)}&select=name,color`, null, 'square_account_profiles');
-    return rows[0] ?? { name: '', color: '#285b36' };
+    // select=* keeps sign-in working until migrations/20261016_account_preferences.sql is applied.
+    const rows = await remote('GET', `?email=eq.${encodeURIComponent(email)}&select=*`, null, 'square_account_profiles');
+    return storedProfile(rows[0]);
   }
-  return (await localRead(profilePath))[email] ?? { name: '', color: '#285b36' };
+  return storedProfile((await localRead(profilePath))[email]);
 }
 let profileWrites = Promise.resolve();
 export function saveAccountProfile(email, profile) {
-  if (durableStorage) return remote('POST', '', { email, ...profile, updated_at: new Date().toISOString() }, 'square_account_profiles', 'resolution=merge-duplicates,return=representation');
+  if (durableStorage) {
+    const { tileColors, ...columns } = profile;
+    return remote('POST', '', { email, ...columns, tile_colors: tileColors, updated_at: new Date().toISOString() }, 'square_account_profiles', 'resolution=merge-duplicates,return=representation');
+  }
   const result = profileWrites.then(async () => {
     const rows = await localRead(profilePath);
     rows[email] = profile;

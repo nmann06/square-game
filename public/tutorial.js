@@ -10,7 +10,7 @@
     return node;
   };
   const card = (color, shape, number) => ({ color, shape, number });
-  const describeCard = card => card.wild ? `wildcard${card.as ? ` representing ${card.as.color} ${card.as.shape} ${card.as.number}` : ''}` : `${card.color} ${card.shape} ${card.number}`;
+  const describeCard = card => card.wild ? (card.as ? t('tut.wildcardAs', { card: SquareI18n.cardName(card.as) }) : t('tut.wildcard')) : SquareI18n.cardName(card);
   // Share the board/hand renderer so tutorial tiles always match the game.
   function tile(card) {
     const node = cardElement(card);
@@ -30,8 +30,8 @@
     [[card('yellow', 'square', 4), card('red', 'circle', 3), card('blue', 'star', 1), card('green', 'triangle', 2)], [false, false, false]]
   ];
   function buildLines() {
-    content.append(make('h3', '', 'Three properties. One simple rule.'));
-    paragraph('Every tile has a color, a shape, and a number (shown in the bottom-right corner). In each horizontal or vertical line, check each property separately: it must be all the same or all different. A mix of repeats and differences is invalid.');
+    content.append(make('h3', '', t('tut.lines.title')));
+    paragraph(t('tut.lines.body'));
     const examples = make('div', 'tutorial-reference');
     reference.forEach(([cards, same], i) => {
       const row = make('div', 'tutorial-reference-row');
@@ -39,10 +39,10 @@
       const rules = make('div', 'tutorial-properties');
       ['color', 'shape', 'number'].forEach((property, index) => {
         const line = make('div', '');
-        line.append(make('strong', '', `${same[index] ? 'Same' : 'Different'} ${property}${same[index] ? '' : 's'}`), document.createTextNode(' on each tile.'));
+        line.append(make('strong', '', t(same[index] ? 'tut.same' : 'tut.different', { property: t(`tut.${property}`) })), document.createTextNode(t('tut.eachTile')));
         rules.append(line);
       });
-      row.setAttribute('aria-label', `Legal line example ${i + 1}`);
+      row.setAttribute('aria-label', t('tut.example', { n: i + 1 }));
       row.append(tiles, rules); examples.append(row);
     });
     content.append(examples);
@@ -53,78 +53,71 @@
   ];
   function board(cards, proposed) {
     const grid = make('div', 'tutorial-board');
-    grid.setAttribute('role', 'group'); grid.setAttribute('aria-label', 'Example board. Dashed outline marks the proposed tile.');
+    grid.setAttribute('role', 'group'); grid.setAttribute('aria-label', t('tut.boardLabel'));
     for (let y = 0; y < 3; y++) for (let x = 0; x < 5; x++) {
       const cell = make('div', `tutorial-cell${x === proposed.x && y === proposed.y ? ' proposed' : ''}`);
       const c = x === proposed.x && y === proposed.y ? proposed : cards.find(c => c.x === x && c.y === y);
       if (c) cell.append(tile(c));
-      cell.setAttribute('aria-label', `Row ${y + 1}, column ${x + 1}: ${c ? `${describeCard(c)}${c === proposed ? ', proposed tile' : ''}` : 'empty'}`);
+      cell.setAttribute('aria-label', t('tut.cell', { row: y + 1, col: x + 1, content: c ? `${describeCard(c)}${c === proposed ? t('tut.proposed') : ''}` : t('tut.empty') }));
       grid.append(cell);
     }
     return grid;
   }
-  function checkMoves() {
-    content.append(make('h3', '', 'Connect to the board. Check both directions.'));
-    paragraph('On your turn, place 1–4 tiles in one row or column. Your move must touch an existing tile along an edge. Leave no gaps between the tiles you play (existing tiles can fill the spaces). Every line you create or extend must stay legal and contain at most four tiles.');
+  // Each case is [button key, board, proposed tile, result key, explanation key].
+  function examplePicker(cases, keyText, titleClass) {
     const choices = make('div', 'tutorial-choices');
     const stage = make('div', 'tutorial-example');
-    const cases = [
-      ['Mixed colors', existing, { x: 3, y: 1, ...card('green', 'circle', 4) }, 'Invalid: red, red, red, green.', 'The row has repeated reds and a different green. Color is neither all the same nor all different. Shape and number passing their checks does not rescue the move.'],
-      ['Five in a line', [...existing, { x: 3, y: 1, ...card('red', 'circle', 4) }], { x: 4, y: 1, ...card('red', 'circle', 1) }, 'Invalid: a fifth tile.', 'A line can hold at most four tiles. Once a four-tile lot is complete, you can build off its sides, but cannot extend its ends.'],
-      ['Diagonal only', existing, { x: 4, y: 1, ...card('red', 'circle', 4) }, 'Invalid: no shared edge.', 'This tile only touches the blue 4 at a corner. A diagonal connection does not count; the proposed move needs an edge connection to the board.']
-    ];
     function choose(index) {
       const [, cards, proposed, title, explanation] = cases[index];
       [...choices.children].forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
-      stage.replaceChildren(board(cards, proposed), make('p', 'tutorial-board-key', 'Dashed tile = proposed move'), make('strong', 'tutorial-invalid', title), make('p', '', explanation));
+      stage.replaceChildren(board(cards, proposed), make('p', 'tutorial-board-key', t(keyText)), make('strong', titleClass, t(title)), make('p', '', t(explanation)));
     }
-    cases.forEach(([label], index) => { const button = make('button', 'secondary', label); button.type = 'button'; button.onclick = () => choose(index); choices.append(button); });
+    cases.forEach(([label], index) => { const button = make('button', 'secondary', t(label)); button.type = 'button'; button.onclick = () => choose(index); choices.append(button); });
     stage.setAttribute('aria-live', 'polite');
     content.append(choices, stage); choose(0);
-    paragraph('In the real game, select a tile in your hand, then an empty board square. The move preview checks legality and shows your score before you press Play cards. Use Undo to revise it.', 'tutorial-note');
+  }
+  function checkMoves() {
+    content.append(make('h3', '', t('tut.check.title')));
+    paragraph(t('tut.check.body'));
+    examplePicker([
+      ['tut.check.mixed', existing, { x: 3, y: 1, ...card('green', 'circle', 4) }, 'tut.check.mixedTitle', 'tut.check.mixedBody'],
+      ['tut.check.five', [...existing, { x: 3, y: 1, ...card('red', 'circle', 4) }], { x: 4, y: 1, ...card('red', 'circle', 1) }, 'tut.check.fiveTitle', 'tut.check.fiveBody'],
+      ['tut.check.diagonal', existing, { x: 4, y: 1, ...card('red', 'circle', 4) }, 'tut.check.diagonalTitle', 'tut.check.diagonalBody']
+    ], 'tut.check.key', 'tutorial-invalid');
+    paragraph(t('tut.check.note'), 'tutorial-note');
   }
   function scoring() {
-    content.append(make('h3', '', 'Count the whole line, then multiply.'));
-    paragraph('Add the numbers on every tile in each line you create or extend, including tiles already on the board. Count each affected line once; a crossing tile counts in both lines. Unchanged lines score nothing.');
+    content.append(make('h3', '', t('tut.score.title')));
+    paragraph(t('tut.score.body'));
     content.append(board(existing, { x: 3, y: 1, ...card('red', 'circle', 4) }));
-    paragraph('Play the dashed red 4. It completes the red row and extends the right-hand column.', 'tutorial-board-key');
+    paragraph(t('tut.score.key'), 'tutorial-board-key');
     const sums = make('div', 'tutorial-sums');
-    for (const [label, sum] of [['Red row', '1 + 2 + 3 + 4 = 10'], ['Right column', '4 + 4 = 8'], ['One four-tile lot', '(10 + 8) × 2 = 36 points']]) {
+    for (const [label, sum] of [[t('tut.score.redRow'), '1 + 2 + 3 + 4 = 10'], [t('tut.score.rightColumn'), '4 + 4 = 8'], [t('tut.score.lot'), t('tut.score.lotSum')]]) {
       const line = make('div', ''); line.append(make('span', '', label), make('strong', '', sum)); sums.append(line);
     }
     content.append(sums);
-    paragraph('The blue row and the blue 3 / red 3 column are unchanged, so they add no points.');
+    paragraph(t('tut.score.unchanged'));
     const list = make('ul', 'tutorial-bonuses');
-    for (const text of ['Each four-tile lot you create or extend doubles the entire turn. Two lots mean ×4; three mean ×8.', 'Play all four tiles from your hand in the main move: double again.', 'Empty your hand with the deck depleted: double again. The game ends; the higher total score wins.']) list.append(make('li', '', text));
+    for (const key of ['tut.score.bonus1', 'tut.score.bonus2', 'tut.score.bonus3']) list.append(make('li', '', t(key)));
     content.append(list);
-    paragraph('After playing, draw back up to four tiles while the deck has cards. If you cannot play, pass; you can select tiles to trade when passing.', 'tutorial-note');
+    paragraph(t('tut.score.note'), 'tutorial-note');
   }
   function wildcards() {
-    content.append(make('h3', '', 'A flexible tile you can use again.'));
-    paragraph('Select a wildcard in your hand, then an empty board square, just like a regular tile. The game automatically finds a color, shape, and number that keeps every line legal. Check the move preview, then press Play cards.');
-    paragraph('A wild must represent one consistent tile in both directions. It cannot be a red circle in its row and a blue square in its column. The game can reinterpret its identity on later turns if all the lines still work.', 'tutorial-note');
+    content.append(make('h3', '', t('tut.wild.title')));
+    paragraph(t('tut.wild.body'));
+    paragraph(t('tut.wild.note'), 'tutorial-note');
     const row = [card('green', 'circle', 1), card('green', 'square', 2), card('green', 'triangle', 3)].map((c, x) => ({ x, y: 1, ...c }));
     const replacement = { x: 3, y: 1, ...card('green', 'star', 4) };
-    const choices = make('div', 'tutorial-choices');
-    const stage = make('div', 'tutorial-example');
-    const cases = [
-      ['Play a wild', row, { x: 3, y: 1, wild: true, as: card('green', 'star', 4) }, 'Represents a green star 4. Scores zero itself.', 'The row has the same color, four different shapes, and four different numbers. The purple wild fills the missing green star 4, but contributes 0 points: (1 + 2 + 3 + 0) × 2 = 12 points for the four-tile lot.'],
-      ['Recover it', row, replacement, 'On a later turn, exchange a regular tile for the wild.', 'Select the green star 4 in your hand, then click the board wildcard before staging your main move. Your regular tile replaces it, and the wild goes into your hand. This exchange scores a base of 1 + 2 + 3 + 4 = 10 and adds one lot multiplier to this turn.'],
-      ['Finish the turn', [...row, replacement], { x: 0, y: 2, ...card('blue', 'circle', 1) }, 'Add your main move, then apply the exchange bonus.', 'After that exchange, play a blue circle 1 below the green circle 1. The new column scores 1 + 1 = 2. Combine both bases, then double for the exchange’s lot: (10 + 2) × 2 = 24 points. The unchanged green row is not scored again by this main move.']
-    ];
-    function choose(index) {
-      const [, cards, proposed, title, explanation] = cases[index];
-      [...choices.children].forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
-      stage.replaceChildren(board(cards, proposed), make('p', 'tutorial-board-key', 'Dashed tile = tile being played or exchanged'), make('strong', '', title), make('p', '', explanation));
-    }
-    cases.forEach(([label], index) => { const button = make('button', 'secondary', label); button.type = 'button'; button.onclick = () => choose(index); choices.append(button); });
-    stage.setAttribute('aria-live', 'polite');
-    content.append(choices, stage); choose(0);
-    content.append(make('h3', '', 'How to exchange a board wild'));
+    examplePicker([
+      ['tut.wild.play', row, { x: 3, y: 1, wild: true, as: card('green', 'star', 4) }, 'tut.wild.playTitle', 'tut.wild.playBody'],
+      ['tut.wild.recover', row, replacement, 'tut.wild.recoverTitle', 'tut.wild.recoverBody'],
+      ['tut.wild.finish', [...row, replacement], { x: 0, y: 2, ...card('blue', 'circle', 1) }, 'tut.wild.finishTitle', 'tut.wild.finishBody']
+    ], 'tut.wild.key', '');
+    content.append(make('h3', '', t('tut.wild.howTitle')));
     const steps = make('ol', 'tutorial-bonuses');
-    for (const text of ['Do it on your turn, before placing tiles for your main move.', 'Select a regular tile from your hand, then click a wildcard on the board. The replacement must keep every affected line legal; it need not match the wild’s previously displayed identity.', 'Repeat to recover more wilds if you have legal replacements. You can play recovered wilds in your main move during the same turn.', 'Finish by playing your main move or passing. Exchange points and lot bonuses are included in the turn’s total. Each exchange scores its affected lines, even if a previous exchange already scored them.']) steps.append(make('li', '', text));
+    for (const key of ['tut.wild.step1', 'tut.wild.step2', 'tut.wild.step3', 'tut.wild.step4']) steps.append(make('li', '', t(key)));
     content.append(steps);
-    paragraph('Wildcards do not bypass the four-tile line limit, connection rule, or one-row-or-column rule. The room’s creator chooses how many wildcards are in the deck (0–10; two by default).', 'tutorial-note');
+    paragraph(t('tut.wild.limits'), 'tutorial-note');
   }
   const chapters = [buildLines, checkMoves, scoring, wildcards];
   function renderChapter() {
@@ -133,9 +126,9 @@
     document.querySelectorAll('[data-chapter]').forEach(button => {
       button.setAttribute('aria-current', Number(button.dataset.chapter) === chapter ? 'step' : 'false');
     });
-    document.getElementById('tutorial-progress').textContent = `${chapter + 1} of ${chapters.length}`;
+    document.getElementById('tutorial-progress').textContent = t('tut.progress', { n: chapter + 1, total: chapters.length });
     document.getElementById('tutorial-back').disabled = chapter === 0;
-    document.getElementById('tutorial-next').textContent = chapter === chapters.length - 1 ? 'Let’s play' : 'Next →';
+    document.getElementById('tutorial-next').textContent = chapter === chapters.length - 1 ? t('tut.done') : t('tut.next');
     content.scrollTop = 0;
   }
   function open() {
@@ -144,6 +137,7 @@
     chapter = 0; renderChapter(); dialog.showModal();
     document.body.classList.add('tutorial-open');
   }
+  SquareI18n.onChange(() => { if (dialog.open) renderChapter(); });
   document.getElementById('open-tutorial').onclick = open;
   document.getElementById('room-tutorial').onclick = open;
   document.getElementById('close-tutorial').onclick = () => dialog.close();

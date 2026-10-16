@@ -27,12 +27,31 @@ export function accountEmail(value) {
   return email;
 }
 export function newCode() { return String(randomInt(1000000)).padStart(6, '0'); }
+export const languages = ['en', 'zh'];
+export const tileColorNames = ['red', 'yellow', 'blue', 'green'];
+export const defaultProfile = () => ({ name: '', color: '#285b36', language: 'en', tileColors: null });
+const hexColor = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+// Null tile colours mean the standard palette; otherwise all four must be set.
+function tileColors(value) {
+  if (value == null) return null;
+  if (typeof value !== 'object' || Array.isArray(value) || !tileColorNames.every(name => hexColor(value[name]))) throw new Error('Choose a valid colour for each tile colour.');
+  return Object.fromEntries(tileColorNames.map(name => [name, value[name].toLowerCase()]));
+}
 export function accountProfile(input) {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name || name.length > 30 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error('Choose an account name between 1 and 30 characters.');
   const color = typeof input.color === 'string' ? input.color.toLowerCase() : '';
   if (!/^#[0-9a-f]{6}$/.test(color)) throw new Error('Choose a valid icon colour.');
-  return { name, color };
+  const language = input.language ?? 'en';
+  if (!languages.includes(language)) throw new Error('Choose a supported language.');
+  return { name, color, language, tileColors: tileColors(input.tileColors) };
+}
+// Profiles saved before language and tile colours existed read as the defaults.
+export function storedProfile(row) {
+  if (!row) return defaultProfile();
+  let colors = null;
+  try { colors = tileColors(row.tileColors ?? row.tile_colors); } catch {}
+  return { name: row.name ?? '', color: hexColor(row.color) ? row.color : '#285b36', language: languages.includes(row.language) ? row.language : 'en', tileColors: colors };
 }
 export function codeHash(email, code) {
   return createHmac('sha256', secret()).update(`square-code:${email}:${code}`).digest('hex');

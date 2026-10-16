@@ -25,6 +25,7 @@ const allowedOrigins = new Set([
 const root = fileURLToPath(new URL('./public/', import.meta.url));
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
+  ['/i18n.js', ['i18n.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/tutorial.js', ['tutorial.js', 'text/javascript; charset=utf-8']],
   ['/config.js', ['config.js', 'text/javascript; charset=utf-8']],

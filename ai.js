@@ -167,7 +167,6 @@ export function chooseAiTurn(observation, difficulty, random = Math.random) {
   }
   // Bounded determinization: count unseen cards, sample possible hidden hands,
   // then compare immediate score - opponent reply + discounted next-turn score.
-  // Finite search is strong strategy, not a claim of a solved imperfect-information game.
   const candidates = [];
   const signatures = new Set();
   // Keep immediate leaders and a couple of lower-scoring alternatives, so the
