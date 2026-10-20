@@ -349,7 +349,8 @@ export function publicGame(game, index) {
     board: game.board, hand: index >= 0 ? game.players[index].hand : [], deckCount: game.deck.length,
     current: game.current, deadline: game.deadline, pendingSwap: index === game.current ? game.pendingSwap : null,
     lastMove: game.lastMove, winner: game.winner, finishReason: game.finishReason ?? null,
-    ...(game.status === 'finished' ? { review: gameReview(game) } : {}),
+    // Finished games carry the full review; active games send the moves so players can step back through them.
+    ...(game.status === 'finished' ? { review: gameReview(game) } : { history: (game.turnHistory ?? []).map(({ turn, playerId, playerName, kind, points, placements }) => ({ turn, playerId, playerName, kind, points, placements })) }),
     // Only the host sees invite details; the joining player never sees emails.
     ...(index === 0 ? { invites: (game.invites ?? []).map(invite => invite.email), hostHasEmail: Boolean(game.players[0].email) } : {})
   };

@@ -1,9 +1,9 @@
 // Interface text for each account language. English is the default and the fallback.
 // Static HTML uses data-i18n (text), data-i18n-html (trusted markup from this file),
 // data-i18n-placeholder, data-i18n-aria-label and data-i18n-title.
-const defaultTileColors = { red: '#db5e58', yellow: '#f2b705', blue: '#4e89c1', green: '#54a678' };
+const defaultTileColors = { red: '#db5e58', yellow: '#f2b705', blue: '#4e89c1', green: '#54a678', wild: '#7553a0' };
 // Distinguishable with red-green and blue-yellow colour blindness (IBM/Wong palettes).
-const colourblindTileColors = { red: '#dc267f', yellow: '#ffb000', blue: '#0072b2', green: '#009e73' };
+const colourblindTileColors = { red: '#dc267f', yellow: '#ffb000', blue: '#0072b2', green: '#009e73', wild: '#785ef0' };
 const plural = (n, one, many) => n === 1 ? one : many;
 
 const translations = {
@@ -46,6 +46,8 @@ const translations = {
     'profile.tilesHelp': 'Choose how each tile colour looks to you. Shapes and numbers stay the same, and your opponent keeps their own colours.',
     'profile.colourblind': 'Colourblind-safe preset',
     'profile.resetColours': 'Reset to standard',
+    'profile.hintsHeading': 'Move hints',
+    'profile.moveDots': 'Show dots on the squares where a selected card can be played',
     'profile.save': 'Save account',
     'profile.saved': 'Account saved. Your name will be used in new games.',
     'profile.winPercent': 'WIN % (FINISHED)',
@@ -53,7 +55,7 @@ const translations = {
     'profile.gamesPlayed': 'GAMES PLAYED',
     'profile.currentGames': 'CURRENT GAMES',
     'profile.expand': 'Edit account & view history ↗',
-    'colour.red': 'Red', 'colour.yellow': 'Yellow', 'colour.blue': 'Blue', 'colour.green': 'Green',
+    'colour.red': 'Red', 'colour.yellow': 'Yellow', 'colour.blue': 'Blue', 'colour.green': 'Green', 'colour.wild': 'Wild',
     'card.red': 'red', 'card.yellow': 'yellow', 'card.blue': 'blue', 'card.green': 'green',
     'card.circle': 'circle', 'card.square': 'square', 'card.triangle': 'triangle', 'card.star': 'star',
     'card.name': ({ color, shape, number }) => `${color} ${shape} ${number}`,
@@ -163,6 +165,12 @@ const translations = {
     'game.staged': ({ n, spots }) => `${n} card${plural(n, '', 's')} staged: ${spots}`,
     'game.pendingSwap': ({ base, lots }) => `Wild exchanges · base ${base}, ${lots} lot(s). Exchange another wild or play your turn.`,
     'game.noneStaged': 'No cards staged.',
+    'game.legalSpot': 'Your selected card can go here',
+    'replay.prev': 'Previous move',
+    'replay.next': 'Next move',
+    'replay.latest': 'Back to latest',
+    'replay.hint': 'Use ← and → to step through moves',
+    'replay.viewing': ({ turn, total }) => turn === 0 ? 'Viewing the starting board' : `Viewing move ${turn} of ${total}`,
     'preview.empty': 'Place tiles to preview your score.',
     'preview.checking': 'Checking move…',
     'preview.legal': ({ points, total }) => `This move: +${points} pts · Total if played: ${total} pts`,
@@ -312,6 +320,8 @@ const translations = {
     'profile.tilesHelp': '为每种牌色选择你看到的颜色。形状和数字保持不变，对手看到的颜色也不受影响。',
     'profile.colourblind': '色盲友好配色',
     'profile.resetColours': '恢复默认颜色',
+    'profile.hintsHeading': '出牌提示',
+    'profile.moveDots': '选中手牌后，在可以出牌的格子上显示圆点',
     'profile.save': '保存账号设置',
     'profile.saved': '账号已保存。新对局将使用你的名字。',
     'profile.winPercent': '胜率（已结束对局）',
@@ -319,7 +329,7 @@ const translations = {
     'profile.gamesPlayed': '已玩局数',
     'profile.currentGames': '进行中的对局',
     'profile.expand': '编辑账号并查看对局记录 ↗',
-    'colour.red': '红色', 'colour.yellow': '黄色', 'colour.blue': '蓝色', 'colour.green': '绿色',
+    'colour.red': '红色', 'colour.yellow': '黄色', 'colour.blue': '蓝色', 'colour.green': '绿色', 'colour.wild': '万能牌',
     'card.red': '红色', 'card.yellow': '黄色', 'card.blue': '蓝色', 'card.green': '绿色',
     'card.circle': '圆形', 'card.square': '方形', 'card.triangle': '三角形', 'card.star': '星形',
     'card.name': ({ color, shape, number }) => `${color}${shape} ${number}`,
@@ -429,6 +439,12 @@ const translations = {
     'game.staged': ({ n, spots }) => `已放置 ${n} 张牌：${spots}`,
     'game.pendingSwap': ({ base, lots }) => `万能牌替换 · 基础分 ${base}，${lots} 个满组。可以继续替换万能牌，或完成本回合出牌。`,
     'game.noneStaged': '尚未放置任何牌。',
+    'game.legalSpot': '选中的牌可以放在这里',
+    'replay.prev': '上一步',
+    'replay.next': '下一步',
+    'replay.latest': '回到最新',
+    'replay.hint': '按 ← 和 → 键回看每一步',
+    'replay.viewing': ({ turn, total }) => turn === 0 ? '正在查看初始棋盘' : `正在查看第 ${turn} 步（共 ${total} 步）`,
     'preview.empty': '放置牌后即可预览得分。',
     'preview.checking': '正在检查出牌…',
     'preview.legal': ({ points, total }) => `本次出牌：+${points} 分 · 出牌后总分：${total} 分`,

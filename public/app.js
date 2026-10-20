@@ -13,7 +13,7 @@ let roomId = location.pathname.match(/^\/square-game\/room\/([\w-]+)$/)?.[1] ?? 
 let playerToken = null;
 let accountToken = localStorage.getItem('square-account-token');
 let signedInEmail = null;
-const blankProfile = () => ({ name: '', color: '#285b36', language: 'en', tileColors: null });
+const blankProfile = () => ({ name: '', color: '#285b36', language: 'en', tileColors: null, moveDots: true });
 let savedProfile = blankProfile();
 let accountData = null;
 let editingAccount = false;
@@ -28,6 +28,8 @@ let gameMode = 'friend';
 let busy = false;
 let reviewTurn = null;
 let reviewRoomId = null;
+// Turn shown while stepping back through an active game; null shows the live board.
+let historyTurn = null;
 const symbols = { circle: '●', square: '■', triangle: '▲', star: '✦' };
 
 function show(id, yes) { $(id).classList.toggle('hidden', !yes); }
@@ -171,15 +173,65 @@ function render() {
   renderPauseControls();
   show('game-panel', room.status !== 'waiting');
   if (room.status === 'waiting') return;
-  if (reviewRoomId !== room.id) { reviewTurn = null; reviewRoomId = room.id; }
+  if (reviewRoomId !== room.id) { reviewTurn = null; historyTurn = null; reviewRoomId = room.id; }
   document.querySelector('.side-panel').classList.toggle('hidden', room.status === 'finished');
   document.querySelector('.play-layout').classList.toggle('review-layout', room.status === 'finished');
-  renderScores(); renderBoard(); renderHand(); renderStaged(); renderLastMove(); updateCountdown(); renderReview();
+  renderScores(); renderBoard(); renderHand(); renderStaged(); renderLastMove(); updateCountdown(); renderReview(); renderReplay();
 }
 function selectReviewTurn(turn) {
   reviewTurn = turn;
-  renderReview(); renderBoard();
+  renderReview(); renderBoard(); renderReplay();
 }
+// Finished games step through the review; active games step through their move history.
+function replayTurns() { return (room.status === 'finished' ? room.review?.turns : room.history) ?? []; }
+function viewedTurn() { return room.status === 'finished' ? reviewTurn : historyTurn; }
+function setViewedTurn(turn) {
+  if (room.status === 'finished') return selectReviewTurn(turn);
+  historyTurn = turn;
+  renderBoard(); renderReplay();
+}
+function stepReplay(delta) {
+  const turns = replayTurns();
+  if (!turns.length) return;
+  const first = turns[0].turn - 1, last = turns.at(-1).turn;
+  // The latest turn is the live board, so stepping forward onto it returns to live.
+  const next = (viewedTurn() ?? last) + delta;
+  setViewedTurn(next >= last ? null : Math.max(first, next));
+}
+// Rebuild the board as it stood after a turn by undoing every later move.
+function boardAfterTurn(turnNumber) {
+  const board = { ...room.board };
+  for (const spot of room.pendingSwap?.spots ?? []) board[spot] = { wild: true };
+  for (const turn of replayTurns().filter(turn => turn.turn > turnNumber).reverse()) {
+    for (const placement of turn.placements) {
+      if (placement.kind === 'swap') board[placement.spot] = { wild: true };
+      else delete board[placement.spot];
+    }
+  }
+  return board;
+}
+function renderReplay() {
+  const turns = replayTurns();
+  show('replay-bar', turns.length > 0);
+  if (!turns.length) return;
+  const viewing = viewedTurn();
+  $('replay-label').textContent = viewing == null ? t('replay.hint') : t('replay.viewing', { turn: viewing, total: turns.at(-1).turn });
+  $('replay-prev').disabled = viewing != null && viewing <= turns[0].turn - 1;
+  $('replay-next').disabled = viewing == null;
+  show('replay-latest', viewing != null);
+}
+$('replay-prev').addEventListener('click', () => stepReplay(-1));
+$('replay-next').addEventListener('click', () => stepReplay(1));
+$('replay-latest').addEventListener('click', () => setViewedTurn(null));
+document.addEventListener('keydown', event => {
+  if (!room || room.status === 'waiting' || !roomId || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  if ($('tutorial').open || (event.target instanceof Element && event.target.closest('input, select, textarea, [contenteditable]'))) return;
+  if (event.key === 'ArrowLeft') stepReplay(-1);
+  else if (event.key === 'ArrowRight') stepReplay(1);
+  else if (event.key === 'Escape' && viewedTurn() != null) setViewedTurn(null);
+  else return;
+  event.preventDefault();
+});
 function renderReview() {
   const parent = $('game-review');
   show('game-review', room.status === 'finished');
@@ -289,6 +341,7 @@ function fillProfileForm(profile) {
   $('profile-language').value = profile.language;
   const colors = { ...SquareI18n.defaultTileColors, ...(profile.tileColors || {}) };
   for (const input of tileColourInputs()) input.value = colors[input.dataset.tileColour];
+  $('profile-move-dots').checked = profile.moveDots !== false;
   renderProfilePreview();
 }
 // Settings preview live while editing; Cancel or leaving the form restores the saved ones.
@@ -436,7 +489,7 @@ $('profile-form').addEventListener('submit', async event => {
   $('profile-save').disabled = true;
   setError('profile-error'); $('profile-message').textContent = '';
   try {
-    const result = await api('/api/account/profile', { method: 'POST', body: JSON.stringify({ name: $('profile-name').value, color: $('profile-color').value, language: $('profile-language').value, tileColors: formTileColors() }) });
+    const result = await api('/api/account/profile', { method: 'POST', body: JSON.stringify({ name: $('profile-name').value, color: $('profile-color').value, language: $('profile-language').value, tileColors: formTileColors(), moveDots: $('profile-move-dots').checked }) });
     if (accountToken !== requestedToken || localStorage.getItem('square-account-token') !== requestedToken) return;
     editingAccount = false;
     useAccount(result.email, result.profile);
@@ -472,6 +525,93 @@ function renderLastMove() {
   show('last-move', Boolean(room.lastMove));
   if (room.lastMove) $('last-move').textContent = t('game.lastMove', { name: room.lastMove.playerName, kind: room.lastMove.kind, points: room.lastMove.points, lots: room.lastMove.lots });
 }
+// A browser copy of the placement rules in game.js, so legal squares can be marked without asking the server about each one.
+const ruleChoices = ['red', 'blue', 'green', 'yellow'].flatMap(color => ['circle', 'square', 'triangle', 'star'].flatMap(shape => [1, 2, 3, 4].map(number => ({ color, shape, number }))));
+function ruleProperty(card, field) { return card.wild ? card.as?.[field] : card[field]; }
+function ruleValidLine(cards) {
+  if (cards.length > 4) return false;
+  if (cards.length < 3) return true;
+  for (const field of ['color', 'shape', 'number']) {
+    const values = cards.map(card => ruleProperty(card, field));
+    if (values.some(value => value === undefined)) return false;
+    if (new Set(values).size !== 1 && new Set(values).size !== values.length) return false;
+  }
+  return true;
+}
+function ruleLines(board) {
+  const cells = Object.entries(board).map(([spot, card]) => { const [x, y] = spot.split(',').map(Number); return { x, y, card }; });
+  const lines = [];
+  for (const horizontal of [true, false]) {
+    const groups = new Map();
+    for (const cell of cells) {
+      const fixed = horizontal ? cell.y : cell.x;
+      if (!groups.has(fixed)) groups.set(fixed, []);
+      groups.get(fixed).push(cell);
+    }
+    for (const row of groups.values()) {
+      row.sort((a, b) => horizontal ? a.x - b.x : a.y - b.y);
+      let run = [];
+      for (const cell of row) {
+        const previous = run.at(-1);
+        if (previous && (horizontal ? cell.x - previous.x : cell.y - previous.y) !== 1) {
+          if (run.length > 1) lines.push(run.map(item => item.card));
+          run = [];
+        }
+        run.push(cell);
+      }
+      if (run.length > 1) lines.push(run.map(item => item.card));
+    }
+  }
+  return lines;
+}
+function ruleBoardLegal(board) {
+  const lines = ruleLines(board);
+  if (lines.some(line => line.length > 4 || (line.every(card => !card.wild) && !ruleValidLine(line)))) return false;
+  const wilds = Object.values(board).filter(card => card.wild);
+  const incident = wilds.map(wild => lines.filter(line => line.includes(wild)));
+  function assign(index) {
+    if (index === wilds.length) return lines.every(ruleValidLine);
+    const preferred = wilds[index].as;
+    const candidates = preferred ? [preferred, ...ruleChoices.filter(choice => choice.color !== preferred.color || choice.shape !== preferred.shape || choice.number !== preferred.number)] : ruleChoices;
+    for (const choice of candidates) {
+      wilds[index].as = choice;
+      if (incident[index].every(line => ruleValidLine(line.filter(card => !card.wild || wilds.indexOf(card) <= index))) && assign(index + 1)) return true;
+    }
+    return false;
+  }
+  return assign(0);
+}
+function ruleMoveLegal(placements) {
+  // Wilds are copied because the search above tries identities on them.
+  const board = Object.fromEntries(Object.entries(room.board).map(([spot, card]) => [spot, card.wild ? { ...card } : card]));
+  for (const { x, y, card } of placements) board[`${x},${y}`] = card.wild ? { id: card.id, wild: true } : card;
+  const horizontal = placements.every(p => p.y === placements[0].y);
+  if (!horizontal && !placements.every(p => p.x === placements[0].x)) return false;
+  const values = placements.map(p => horizontal ? p.x : p.y);
+  for (let value = Math.min(...values); value <= Math.max(...values); value++) {
+    if (!board[horizontal ? `${value},${placements[0].y}` : `${placements[0].x},${value}`]) return false;
+  }
+  const connected = placements.some(({ x, y }) => [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]].some(([a, b]) => room.board[`${a},${b}`]));
+  return connected && ruleBoardLegal(board);
+}
+// Empty squares where the selected card would make the staged move legal.
+function legalSpots() {
+  const spots = new Set();
+  const card = room.hand.find(item => item.id === selected);
+  if (!savedProfile.moveDots || !card || room.status !== 'playing' || !currentIsYou() || $('trade-mode').checked || staged.length >= 4) return spots;
+  const occupied = new Set([...Object.keys(room.board), ...staged.map(p => `${p.x},${p.y}`)]);
+  const tried = new Set();
+  for (const spot of occupied) {
+    const [x, y] = spot.split(',').map(Number);
+    for (const [a, b] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+      const key = `${a},${b}`;
+      if (occupied.has(key) || tried.has(key)) continue;
+      tried.add(key);
+      if (ruleMoveLegal([...staged, { x: a, y: b, card }])) spots.add(key);
+    }
+  }
+  return spots;
+}
 function renderBoard() {
   const parent = $('board'); parent.replaceChildren();
   const positions = Object.keys(room.board).concat(staged.map(p => `${p.x},${p.y}`)).map(value => value.split(',').map(Number));
@@ -479,31 +619,38 @@ function renderBoard() {
   const minX = Math.min(-3, ...xs) - 2, maxX = Math.max(3, ...xs) + 2;
   const minY = Math.min(-3, ...ys) - 2, maxY = Math.max(3, ...ys) + 2;
   parent.style.gridTemplateColumns = `repeat(${maxX - minX + 1}, auto)`;
+  const viewing = viewedTurn();
+  const board = viewing == null ? room.board : boardAfterTurn(viewing);
+  parent.classList.toggle('replaying', viewing != null && room.status !== 'finished');
   // Highlight the cards the other player placed on their last move.
   const you = room.players.find(p => p.isYou)?.id;
-  const recent = new Set(room.lastMove && room.lastMove.playerId !== you ? room.lastMove.cells ?? [] : []);
-  const reviewed = room.status === 'finished' ? room.review?.turns.find(turn => turn.turn === reviewTurn) : null;
+  const recent = new Set(viewing == null && room.lastMove && room.lastMove.playerId !== you ? room.lastMove.cells ?? [] : []);
+  const reviewed = viewing == null ? null : replayTurns().find(turn => turn.turn === viewing);
   const reviewSpots = new Set(reviewed?.placements.map(p => p.spot) ?? []);
+  const shownStaged = viewing == null ? staged : [];
+  const dots = viewing == null ? legalSpots() : new Set();
   const fragment = document.createDocumentFragment();
   for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
     const key = `${x},${y}`;
-    const existing = room.board[key];
-    const preview = staged.find(p => p.x === x && p.y === y);
-    const cell = element('button', `cell ${existing || preview ? 'occupied' : 'empty'}`);
+    const existing = board[key];
+    const preview = shownStaged.find(p => p.x === x && p.y === y);
+    const cell = element('button', `cell ${existing || preview ? 'occupied' : 'empty'}${dots.has(key) ? ' move-dot' : ''}`);
     cell.type = 'button';
     cell.setAttribute('aria-label', existing ? t('game.boardCard', { card: describeCard(existing), x, y }) : t('game.emptyCell', { x, y }));
+    if (dots.has(key)) cell.setAttribute('aria-label', `${cell.getAttribute('aria-label')}. ${t('game.legalSpot')}`);
     if (existing) cell.append(cardElement(existing, false, false, recent.has(key)));
     else if (preview) {
       const tile = cardElement(preview.card, false, true);
       if (previewStatus.status === 'legal' || previewStatus.status === 'illegal') tile.classList.add(previewStatus.status);
       cell.append(tile);
     }
+    cell.classList.toggle('review-highlight', reviewSpots.has(key));
     if (existing && room.status === 'finished') {
-      const owner = room.review?.turns.findLast(turn => turn.placements.some(p => p.spot === key && p.card.id === existing.id));
+      // Wilds restored while stepping back have no id, so match them to the turn that played a wild there.
+      const owner = room.review?.turns.findLast(turn => turn.turn <= (viewing ?? Infinity) && turn.placements.some(p => p.spot === key && (p.card.id === existing.id || (existing.wild && !existing.id && p.card.wild))));
       const attribution = owner ? t('game.placedBy', { name: owner.playerName, turn: owner.turn }) : key === '0,0' && room.review?.complete ? t('game.openingCard') : t('game.noHistory');
       cell.title = attribution;
       cell.setAttribute('aria-label', `${cell.getAttribute('aria-label')}. ${attribution}`);
-      cell.classList.toggle('review-highlight', reviewSpots.has(key));
       cell.addEventListener('click', () => { if (owner) selectReviewTurn(owner.turn); });
     } else cell.addEventListener('click', () => boardClick(x, y, existing));
     fragment.append(cell);
@@ -521,7 +668,9 @@ function renderHand() {
       if ($('trade-mode').checked) {
         if (tradeIds.has(card.id)) tradeIds.delete(card.id); else tradeIds.add(card.id);
       } else selected = selected === card.id ? null : card.id;
-      renderHand(); renderControls();
+      // Choosing a card means playing now, so leave any earlier move being viewed.
+      historyTurn = null;
+      renderHand(); renderControls(); renderBoard(); renderReplay();
     });
     parent.append(button);
   });
@@ -583,7 +732,7 @@ function renderControls() {
   $('pass-button').textContent = $('trade-mode').checked && tradeIds.size ? t('game.tradePass', { n: tradeIds.size }) : t('game.pass');
 }
 function boardClick(x, y, existing) {
-  if (!room || room.status !== 'playing' || !currentIsYou() || busy || !selected || $('trade-mode').checked) return;
+  if (!room || room.status !== 'playing' || !currentIsYou() || busy || !selected || $('trade-mode').checked || historyTurn != null) return;
   const card = room.hand.find(item => item.id === selected);
   if (!card) return;
   if (existing?.wild && !staged.length && !card.wild) {
@@ -632,7 +781,7 @@ async function act(input) {
   try {
     const data = await api(`/api/rooms/${roomId}/action`, { method: 'POST', body: JSON.stringify(input) });
     if (input.type !== 'swap') { staged = []; tradeIds.clear(); $('trade-mode').checked = false; }
-    selected = null;
+    selected = null; historyTurn = null;
     setRoom(data);
     if (data.notificationSent === false && room.timerSeconds >= 86400 && room.status === 'playing') setError('room-error', t('room.emailFailed'));
   } catch (error) {
@@ -735,7 +884,7 @@ $('copy-link').addEventListener('click', async () => {
 $('play-button').addEventListener('click', () => act({ type: 'play', placements: staged.map(({ card, ...place }) => place) }));
 $('undo-button').addEventListener('click', () => { staged.pop(); renderBoard(); renderHand(); renderStaged(); });
 $('pass-button').addEventListener('click', () => act({ type: 'pass', tradeIds: $('trade-mode').checked ? [...tradeIds] : [] }));
-$('trade-mode').addEventListener('change', () => { selected = null; tradeIds.clear(); renderHand(); });
+$('trade-mode').addEventListener('change', () => { selected = null; tradeIds.clear(); renderHand(); renderBoard(); });
 
 $('code-request-form').addEventListener('submit', async event => {
   event.preventDefault();

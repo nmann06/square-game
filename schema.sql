@@ -53,7 +53,8 @@ create table if not exists public.square_account_profiles (
 );
 alter table public.square_account_profiles
   add column if not exists language text not null default 'en',
-  add column if not exists tile_colors jsonb;
+  add column if not exists tile_colors jsonb,
+  add column if not exists move_dots boolean not null default true;
 alter table public.square_account_profiles drop constraint if exists square_account_profiles_language_check;
 alter table public.square_account_profiles
   add constraint square_account_profiles_language_check check (language in ('en', 'zh'));

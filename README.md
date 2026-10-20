@@ -127,6 +127,8 @@ If email sign-in reports `PGRST205` for `public.square_account_profiles`, run [`
 
 If saving the account reports a missing `language` or `tile_colors` column, run [`migrations/20261016_account_preferences.sql`](migrations/20261016_account_preferences.sql) the same way. Sign-in keeps working before it is applied, but language and tile colour changes can't be saved.
 
+If saving the account reports a missing `move_dots` column, run [`migrations/20261019_move_dots.sql`](migrations/20261019_move_dots.sql) the same way. It adds the move-dots toggle, which stays on for existing accounts.
+
 **Homepage client.** The `nathanielmann.ca` homepage is a separate Render static site. It hosts a copy of this repo's browser files under `/square-game` and calls this service's API. Set the homepage's `GAME_API_ORIGIN` to this service's `onrender.com` origin. After changing anything in `public/`, run `node sync-game.js` in the homepage repo and deploy both. This service doesn't claim the root domain.
 
 ### Two-hour email reminders

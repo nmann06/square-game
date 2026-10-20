@@ -28,15 +28,21 @@ export function accountEmail(value) {
 }
 export function newCode() { return String(randomInt(1000000)).padStart(6, '0'); }
 export const languages = ['en', 'zh'];
-export const tileColorNames = ['red', 'yellow', 'blue', 'green'];
-export const defaultProfile = () => ({ name: '', color: '#285b36', language: 'en', tileColors: null });
+export const tileColorNames = ['red', 'yellow', 'blue', 'green', 'wild'];
+const defaultWildColor = '#7553a0';
+export const defaultProfile = () => ({ name: '', color: '#285b36', language: 'en', tileColors: null, moveDots: true });
 const hexColor = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
-// Null tile colours mean the standard palette; otherwise all four must be set.
+// Null tile colours mean the standard palette; otherwise every colour must be set.
 function tileColors(value) {
   if (value == null) return null;
-  if (typeof value !== 'object' || Array.isArray(value) || !tileColorNames.every(name => hexColor(value[name]))) throw new Error('Choose a valid colour for each tile colour.');
-  return Object.fromEntries(tileColorNames.map(name => [name, value[name].toLowerCase()]));
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error('Choose a valid colour for each tile colour.');
+  // Palettes saved before wildcards had their own colour keep the standard wild.
+  const colors = { wild: defaultWildColor, ...value };
+  if (!tileColorNames.every(name => hexColor(colors[name]))) throw new Error('Choose a valid colour for each tile colour.');
+  return Object.fromEntries(tileColorNames.map(name => [name, colors[name].toLowerCase()]));
 }
+// Move dots are on unless the account turned them off.
+const moveDots = value => typeof value === 'boolean' ? value : true;
 export function accountProfile(input) {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name || name.length > 30 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error('Choose an account name between 1 and 30 characters.');
@@ -44,14 +50,14 @@ export function accountProfile(input) {
   if (!/^#[0-9a-f]{6}$/.test(color)) throw new Error('Choose a valid icon colour.');
   const language = input.language ?? 'en';
   if (!languages.includes(language)) throw new Error('Choose a supported language.');
-  return { name, color, language, tileColors: tileColors(input.tileColors) };
+  return { name, color, language, tileColors: tileColors(input.tileColors), moveDots: moveDots(input.moveDots) };
 }
-// Profiles saved before language and tile colours existed read as the defaults.
+// Profiles saved before language, tile colours and move dots existed read as the defaults.
 export function storedProfile(row) {
   if (!row) return defaultProfile();
   let colors = null;
   try { colors = tileColors(row.tileColors ?? row.tile_colors); } catch {}
-  return { name: row.name ?? '', color: hexColor(row.color) ? row.color : '#285b36', language: languages.includes(row.language) ? row.language : 'en', tileColors: colors };
+  return { name: row.name ?? '', color: hexColor(row.color) ? row.color : '#285b36', language: languages.includes(row.language) ? row.language : 'en', tileColors: colors, moveDots: moveDots(row.moveDots ?? row.move_dots) };
 }
 export function codeHash(email, code) {
   return createHmac('sha256', secret()).update(`square-code:${email}:${code}`).digest('hex');

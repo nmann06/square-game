@@ -95,7 +95,7 @@ export async function listAccountRooms(email) {
 export const durableStorage = Boolean(url && secret);
 export async function getAccountProfile(email) {
   if (durableStorage) {
-    // select=* keeps sign-in working until migrations/20261016_account_preferences.sql is applied.
+    // select=* keeps sign-in working until the account migrations are applied.
     const rows = await remote('GET', `?email=eq.${encodeURIComponent(email)}&select=*`, null, 'square_account_profiles');
     return storedProfile(rows[0]);
   }
@@ -104,8 +104,8 @@ export async function getAccountProfile(email) {
 let profileWrites = Promise.resolve();
 export function saveAccountProfile(email, profile) {
   if (durableStorage) {
-    const { tileColors, ...columns } = profile;
-    return remote('POST', '', { email, ...columns, tile_colors: tileColors, updated_at: new Date().toISOString() }, 'square_account_profiles', 'resolution=merge-duplicates,return=representation');
+    const { tileColors, moveDots, ...columns } = profile;
+    return remote('POST', '', { email, ...columns, tile_colors: tileColors, move_dots: moveDots, updated_at: new Date().toISOString() }, 'square_account_profiles', 'resolution=merge-duplicates,return=representation');
   }
   const result = profileWrites.then(async () => {
     const rows = await localRead(profilePath);

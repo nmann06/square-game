@@ -16,10 +16,13 @@ test('review records exact placements, scoring bonuses, zero turns, and tied ext
   const initial = fixture();
   let game = playCards(initial, 0, [{ x: 1, y: 0, cardId: 'a' }], 1);
   assert.equal(publicGame(game, -1).review, undefined);
+  // Active games expose their moves so players can step back through them.
+  assert.deepEqual(publicGame(game, -1).history, [{ turn: 1, playerId: game.players[0].id, playerName: 'Alice', kind: 'play', points: 3, placements: [{ spot: '1,0', card: card('a', 2), kind: 'play' }] }]);
   game = passTurn(game, 1, [], 2);
   game = passTurn(game, 0, [], 3);
   assert.equal(game.status, 'finished');
   const review = publicGame(game, -1).review;
+  assert.equal(publicGame(game, -1).history, undefined);
   assert.equal(review.complete, true);
   assert.deepEqual(review.turns.map(t => t.points), [3, 0, 0]);
   assert.deepEqual(review.turns[0].placements, [{ spot: '1,0', card: card('a', 2), kind: 'play' }]);

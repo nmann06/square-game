@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#14271f">
   <title>Square Game</title>
-  <link rel="stylesheet" href="/square-game/styles.css?v=account-settings-2">
+  <link rel="stylesheet" href="/square-game/styles.css?v=move-hints-1">
   <script>try { if (localStorage.getItem('square-account-token')) { document.documentElement.classList.add('account-restoring'); const settings = JSON.parse(localStorage.getItem('square-account-settings')) || {}; if (settings.language === 'zh') document.documentElement.lang = 'zh-CN'; for (const [name, value] of Object.entries(settings.tileColors || {})) if (/^#[0-9a-f]{6}$/i.test(value)) document.documentElement.style.setProperty('--tile-' + name, value); } } catch {}</script>
   <script src="/square-game/config.js"></script>
-  <script src="/square-game/i18n.js?v=account-settings-2" defer></script>
-  <script src="/square-game/app.js?v=account-settings-2" defer></script>
-  <script src="/square-game/tutorial.js?v=account-settings-2" defer></script>
+  <script src="/square-game/i18n.js?v=move-hints-1" defer></script>
+  <script src="/square-game/app.js?v=move-hints-1" defer></script>
+  <script src="/square-game/tutorial.js?v=move-hints-1" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -60,8 +60,13 @@
                     <label><span class="tile yellow" aria-hidden="true">■<small>2</small></span><span data-i18n="colour.yellow">Yellow</span><input id="tile-colour-yellow" data-tile-colour="yellow" type="color" value="#f2b705"></label>
                     <label><span class="tile blue" aria-hidden="true">▲<small>3</small></span><span data-i18n="colour.blue">Blue</span><input id="tile-colour-blue" data-tile-colour="blue" type="color" value="#4e89c1"></label>
                     <label><span class="tile green" aria-hidden="true">✦<small>4</small></span><span data-i18n="colour.green">Green</span><input id="tile-colour-green" data-tile-colour="green" type="color" value="#54a678"></label>
+                    <label><span class="tile wild" aria-hidden="true">✳</span><span data-i18n="colour.wild">Wild</span><input id="tile-colour-wild" data-tile-colour="wild" type="color" value="#7553a0"></label>
                   </div>
                   <div class="tile-colour-actions"><button id="tile-colours-colourblind" class="secondary" type="button" data-i18n="profile.colourblind">Colourblind-safe preset</button><button id="tile-colours-reset" class="secondary" type="button" data-i18n="profile.resetColours">Reset to standard</button></div>
+                </fieldset>
+                <fieldset>
+                  <legend data-i18n="profile.hintsHeading">Move hints</legend>
+                  <label class="toggle-label"><input id="profile-move-dots" type="checkbox" checked> <span data-i18n="profile.moveDots">Show dots on the squares where a selected card can be played</span></label>
                 </fieldset>
                 <div class="profile-buttons"><button id="profile-save" class="primary" type="submit" data-i18n="profile.save">Save account</button><button id="profile-cancel" class="secondary" type="button" data-i18n="profile.cancel">Cancel</button></div>
                 <p id="profile-error" class="error" role="alert"></p>
@@ -129,7 +134,7 @@
           <div id="last-move" class="last-move hidden"></div>
           <section id="game-review" class="game-review hidden" aria-labelledby="review-heading"></section>
           <div class="play-layout">
-            <div class="board-wrap"><div class="board-head"><span data-i18n="game.board">GAME BOARD</span><span id="deck-count"></span></div><div id="board" class="board" aria-label="Game board" data-i18n-aria-label="game.boardLabel"></div></div>
+            <div class="board-wrap"><div class="board-head"><span data-i18n="game.board">GAME BOARD</span><span id="deck-count"></span></div><div id="replay-bar" class="replay-bar hidden"><button id="replay-prev" type="button" aria-label="Previous move" title="Previous move" data-i18n-aria-label="replay.prev" data-i18n-title="replay.prev">←</button><span id="replay-label" role="status" aria-live="polite"></span><button id="replay-next" type="button" aria-label="Next move" title="Next move" data-i18n-aria-label="replay.next" data-i18n-title="replay.next">→</button><button id="replay-latest" class="replay-latest hidden" type="button" data-i18n="replay.latest">Back to latest</button></div><div id="board" class="board" aria-label="Game board" data-i18n-aria-label="game.boardLabel"></div></div>
             <aside class="side-panel">
               <div class="side-section"><h2 data-i18n="game.hand">Your hand</h2><p id="hand-help" class="fine">Select a card, then choose an empty square.</p><div id="hand" class="hand"></div></div>
               <div class="side-section"><h3 data-i18n="game.move">Move</h3><p id="move-help" class="fine" data-i18n="game.moveHelp">Play 1–4 cards in one row or column.</p><div id="staged" class="staged"></div><div id="move-preview" class="move-preview" role="status" aria-live="polite">Place tiles to preview your score.</div><div class="button-row"><button id="undo-button" class="secondary" data-i18n="game.undo">Undo</button><button id="play-button" class="primary" data-i18n="game.play">Play cards</button></div><button id="pass-button" class="text-button">Pass turn</button><label class="trade-label"><input id="trade-mode" type="checkbox"> <span data-i18n="game.tradeLabel">Trade selected cards when passing</span></label></div>

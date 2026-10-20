@@ -8,20 +8,24 @@ import { fileURLToPath } from 'node:url';
 import { accountProfile, issueSession, storedProfile } from '../account.js';
 
 test('account profile validates names and icon colours without requiring unique names', () => {
-  assert.deepEqual(accountProfile({ name: ' Alex ', color: '#FFAA00' }), { name: 'Alex', color: '#ffaa00', language: 'en', tileColors: null });
+  assert.deepEqual(accountProfile({ name: ' Alex ', color: '#FFAA00' }), { name: 'Alex', color: '#ffaa00', language: 'en', tileColors: null, moveDots: true });
   for (const name of ['', '   ', 'x'.repeat(31), 'line\nbreak']) assert.throws(() => accountProfile({ name, color: '#123456' }));
   for (const color of ['', 'red', '#123', 'url(example)']) assert.throws(() => accountProfile({ name: 'Alex', color }));
 });
 
 test('account profile validates language and a full set of tile colours', () => {
-  const tileColors = { red: '#DC267F', yellow: '#ffb000', blue: '#0072b2', green: '#009e73' };
-  assert.deepEqual(accountProfile({ name: 'Alex', color: '#123456', language: 'zh', tileColors }),
-    { name: 'Alex', color: '#123456', language: 'zh', tileColors: { ...tileColors, red: '#dc267f' } });
+  const tileColors = { red: '#DC267F', yellow: '#ffb000', blue: '#0072b2', green: '#009e73', wild: '#785EF0' };
+  assert.deepEqual(accountProfile({ name: 'Alex', color: '#123456', language: 'zh', tileColors, moveDots: false }),
+    { name: 'Alex', color: '#123456', language: 'zh', tileColors: { ...tileColors, red: '#dc267f', wild: '#785ef0' }, moveDots: false });
   for (const language of ['fr', '', 'ZH']) assert.throws(() => accountProfile({ name: 'Alex', color: '#123456', language }));
-  for (const colors of ['red', [], { red: '#dc267f' }, { ...tileColors, blue: 'blue' }]) assert.throws(() => accountProfile({ name: 'Alex', color: '#123456', tileColors: colors }));
-  // Older rows without the new columns read as English with the standard palette.
-  assert.deepEqual(storedProfile({ name: 'Old', color: '#285b36' }), { name: 'Old', color: '#285b36', language: 'en', tileColors: null });
+  for (const colors of ['red', [], { red: '#dc267f' }, { ...tileColors, blue: 'blue' }, { ...tileColors, wild: 'purple' }]) assert.throws(() => accountProfile({ name: 'Alex', color: '#123456', tileColors: colors }));
+  // Older rows without the new columns read as English with the standard palette and move dots on.
+  assert.deepEqual(storedProfile({ name: 'Old', color: '#285b36' }), { name: 'Old', color: '#285b36', language: 'en', tileColors: null, moveDots: true });
   assert.deepEqual(storedProfile({ name: 'Row', color: '#285b36', language: 'zh', tile_colors: tileColors }).tileColors.red, '#dc267f');
+  assert.equal(storedProfile({ name: 'Row', color: '#285b36', move_dots: false }).moveDots, false);
+  // Palettes saved before wildcards had a colour keep the standard wild.
+  const { wild, ...fourColours } = tileColors;
+  assert.equal(storedProfile({ name: 'Row', color: '#285b36', tile_colors: fourColours }).tileColors.wild, '#7553a0');
 });
 
 test('every server and game error message has a Mandarin translation', async () => {
@@ -82,12 +86,12 @@ test('email-keyed profiles are private, persistent, and determine signed-in room
     const profiles = JSON.parse(await readFile(join(directory, 'data/account-profiles.json'), 'utf8'));
     assert.deepEqual(Object.keys(profiles).sort(), ['first@example.com', 'second@example.com']);
     await stop(); await start();
-    const tileColors = { red: '#dc267f', yellow: '#ffb000', blue: '#0072b2', green: '#009e73' };
-    assert.equal((await request('/api/account/profile', { name: 'Robin', color: '#ffaa00', language: 'zh', tileColors }, tokenA)).status, 200);
+    const tileColors = { red: '#dc267f', yellow: '#ffb000', blue: '#0072b2', green: '#009e73', wild: '#785ef0' };
+    assert.equal((await request('/api/account/profile', { name: 'Robin', color: '#ffaa00', language: 'zh', tileColors, moveDots: false }, tokenA)).status, 200);
     assert.equal((await request('/api/account/profile', { name: 'Robin', color: '#ffaa00', language: 'xx' }, tokenA)).status, 400);
     await stop(); await start();
     const me = await request('/api/account/me', null, tokenA);
-    assert.deepEqual(me.profile, { name: 'Robin', color: '#ffaa00', language: 'zh', tileColors });
+    assert.deepEqual(me.profile, { name: 'Robin', color: '#ffaa00', language: 'zh', tileColors, moveDots: false });
     assert.equal(me.email, 'first@example.com');
   } finally {
     await stop();
